@@ -5,8 +5,9 @@ from __future__ import print_function
 import os, sys, shutil
 import argparse
 import math
-import string
+import pexpect
 import itertools
+import re
 
 """
 Do as many MOM6 runs as quickly as possible. Ideally we need ~100 runs in less
@@ -17,18 +18,25 @@ a single large PBS session and schedule all runs within that session. The runs
 will be executed in parallel as much as possible.
 """
 
-class SlotAllocator:
+class Experiment:
 
-    def __init__(self, slot_ids):
-        self.slot_ids = slot_ids
-        self.free_space_map = [True]*len(self.slot_ids)
+    def __init__(self, path, model):
+        self.path = path
+        self.model = model
 
-    def alloc(self, nslots):
+
+class NodeAllocator:
+
+    def __init__(self, node_ids):
+        self.node_ids = node_ids
+        self.free_space_map = [True]*len(self.node_ids)
+
+    def alloc(self, nnodes):
         """
-        Allocate nslots, return a key to be used for deallocation.
+        Allocate nnodes nodes, return a key to be used for deallocation.
         """
 
-        if sum(self.free_space_map) < nslots:
+        if sum(self.free_space_map) < nnodes:
             return None
 
         start_idx = None
@@ -40,39 +48,57 @@ class SlotAllocator:
                     start_idx = i
                 num_found += 1
 
-                if num_found == nslots:
+                if num_found == nnodes:
                     break
             else:
                 start_idx = None
                 num_found = 0
 
-        if num_found == nslots:
-            self.free_space_map[start_idx:start_idx+nslots] = False
-            return (start_idx, nslots), self.slot_ids[start_idx]
+        if num_found == nnodes:
+            self.free_space_map[start_idx:start_idx+nnodes] = False
+            key = (start_idx, nnodes)
+            allocated_nodes = self.node_ids[start_idx:start_idx+nnodes]
+            return key, allocated_nodes
         else:
             return None
 
     def dealloc(self, key):
-        start_idx, nslots = key
-        self.free_space_map[start_idx:start_idx+nslots] = True
+        start_idx, nnodes = key
+        self.free_space_map[start_idx:start_idx+nnodes] = True
 
 
 class Run:
 
-    def __init__(self, compiler, build, memory_type, analyzer, exp):
+    def __init__(self, mom_dir, compiler, build, memory_type, analyzer, model, exp):
         self.compiler = compiler
         self.build = build
         self.memory_type = memory_type
         self.analyzer = analyzer
         self.exp= exp
         self.ncpus = 8
-        self.nslots = int(math.ceil(self.ncpus / 16.))
+        self.nnodes = int(math.ceil(self.ncpus / 16.))
 
         self.output = ''
         self.status = 'NOT_RUN'
         self.alloc_key = None
 
+        dir = '_'.join([compiler, build, memory_type, analyzer, exp.path])
+        self.my_dir = os.path.join(mom_dir, dir)
+        self.exe = os.path.join(mom_dir, 'build', compiler, exp.model, build, 'MOM6')
+        self.output_file = os.path.join(self.my_dir, 'mom.out')
+        self.exe_cmd = '(mpirun --hosts {} -np {} {} &> {} ; echo {}) &'
 
+    def get_exe_cmd(self, node_ids)
+
+        hosts = ','.join(node_ids)
+        cmd = self.my_exe_cmd.format(hosts, self.ncpus, self.exe,
+                                        self.output_file, 'Run complete')
+        return cmd
+
+    def update_status(self, output):
+        self.output = output
+        if 'Run complete' in output:
+            self.status = 'FINISHED'
 
 class Pbs:
 
@@ -81,39 +107,57 @@ class Pbs:
         self.cmd = 'qsub -I -P v45 -q express -l ncpus={},mem={}Gb,walltime=1:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
 
-    def start_session(self):
+    def start_session(self, submit_qsub=True):
 
-        self.p_obj = pexpect.spawn(self.cmd)
+        if submit_qsub:
+            self.p_obj = pexpect.spawn(self.cmd, timeout=None)
+            self.p_obj.expect('\[.+\]\$ ')
+        else:
+            self.p_obj = pexpect.spawn('bash')
+            self.p_obj.expect('\[.+\]\$ ')
+
+        self.p_obj.sendline('module load openmpi/1.8.4')
         self.p_obj.expect('\[.+\]\$ ')
         self.p_obj.sendline('cat $PBS_NODEFILE')
         self.p_obj.expect('\[.+\]\$ ')
+        nodes = self.parse_nodefile(self.p_obj.before)
 
-        return slots
+        return nodes
 
-    def start_run(run, node):
+
+    def start_run(self, run, nodes):
         """
         Start a run on a particular node
         """
 
         run.status = 'IN_PROGRESS'
-        return True
+
+        self.p_obj.sendline('cd {}'.format(run.my_dir))
+        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.sendline(run.get_exe_cmd(nodes))
+        self.p_obj.expect('\[.+\]\$ ')
 
 
-    def update_run_status(run):
+    def update_run_status(self, run):
         """
         Update the stdout, stderr of a current run.
         """
 
-        run.output = ''
-        if run.output[-12:]  == 'run finished':
-            run.status = 'FINISHED'
+        self.p_obj.sendline('cat ' + run.output_file)
+        self.p_obj.expect('\[.+\]\$ ')
+        run.update_status(self.p_obj.before)
 
+
+    def parse_nodefile(self, string):
+
+        matches = re.findall('r\d+', string, flags=re.MULTILINE)
+        return list(set(matches))
 
 class Scheduler:
 
     def __init__(self, runs, pbs, allocator):
 
-        self.queued_runs = sorted(runs, key=lambda x : x.slots, reverse=True)
+        self.queued_runs = sorted(runs, key=lambda x : x.nnodes, reverse=True)
         self.in_progress_runs = []
         self.completed_runs = []
 
@@ -122,7 +166,7 @@ class Scheduler:
             return self.queued_runs[0]
         else:
             for r in self.queued_runs:
-                if r.slots < try_size:
+                if r.nnodes < try_size:
                     return r
 
         return None
@@ -137,19 +181,19 @@ class Scheduler:
                 run = find_largest_queued_run_smaller_than(try_size)
                 if run is None:
                     break
-                key, node = allocator.alloc(run.slots)
+                key, nodes = allocator.alloc(run.nnodes)
                 if key:
                     in_progress_runs.append(run)
                     queued_runs.remove(run)
                     run.alloc_key = key
-                    pbs.start_run(run, node)
+                    pbs.start_run(run, nodes)
                     break
                 else:
-                    try_size = run.slots
+                    try_size = run.nnodes
 
             # Cycle through all in progress runs seeing if any have finished.
             for run in in_progress_runs:
-                pbs.update_run_ouput(run)
+                pbs.update_run_status(run)
                 if run.status == 'FINISHED':
                     in_progress_runs.remove(run)
                     completed_runs.append(run)
@@ -157,29 +201,39 @@ class Scheduler:
 
             time.sleep(1)
 
-def create_runs(mom_dir, configs):
+
+def create_runs(mom_dir, exps, configs):
     """
     Return a list of all run objs
     """
 
     runs = []
     for args in itertools.product(*configs):
-        runs.append(Run(*args))
+        runs.append(Run(mom_dir, *args))
+
+    return runs
 
 
 def init_run_dirs(configs, mom_dir):
     """
-    Assume that code has been downlowded. Setup run directories, build the models.
+    Assume that code has been downlowded. Setup run directories.
     """
 
     for args in itertools.product(*configs):
         new_dir = os.path.join(mom_dir, '_'.join(args).strip('_') + \
                     '_ocean_only')
-        shutil.copytree(os.path.join(mom_dir, 'ocean_only'), new_dir)
+        if not os.path.exists(new_dir):
+            shutil.copytree(os.path.join(mom_dir, 'ocean_only'), new_dir,
+                                symlinks=True)
         new_dir = os.path.join(mom_dir, '_'.join(args).strip('_') + \
-                    '_ocean_ice_SIS2')
-        shutil.copytree(os.path.join(mom_dir, 'ocean_ice_SIS2'), new_dir)
+                    '_ice_ocean_SIS2')
+        if not os.path.exists(new_dir):
+            shutil.copytree(os.path.join(mom_dir, 'ice_ocean_SIS2'), new_dir,
+                                symlinks=True)
 
+
+def build_models(args.mom_dir, compilers, builds, memory_types, models):
+    pass
 
 def discover_experiments(mom_dir):
     """
@@ -196,7 +250,15 @@ def discover_experiments(mom_dir):
     for path, dirs, filenames in os.walk(mom_dir):
         for fname in filenames:
             if fname == 'input.nml' and 'common' not in path:
-                exps.append(fix_exp_path(path, mom_dir))
+                model = None
+                if 'ocean_only' in path:
+                    model = 'ocean_only'
+                if 'ice_ocean_sis2' in path:
+                    model = 'ice_ocean_sis2'
+
+                if model:
+                    e = Experiment(fix_exp_path(path, mom_dir), model)
+                    exps.append(e)
     return exps
 
 
@@ -204,8 +266,11 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('mom_dir', help='Path to MOM6-examples')
-    parser.add_argument('--ncpus', default=1280)
+    parser.add_argument('--ncpus', default=16, type=int)
+    parser.add_argument('--already_in_pbs', action='store_true', default=False)
     args = parser.parse_args()
+
+    args.mom_dir = os.path.realpath(args.mom_dir)
 
     compilers = ['intel', 'gnu']
     builds = ['debug', 'repro']
@@ -214,12 +279,17 @@ def main():
     exps = discover_experiments(args.mom_dir)
     configs = (compilers, builds, memory_types, analyzers, exps)
 
+    ocean_model = Model()
+    ice_ocean_SIS2 = Model()
+    models = [ocean_model, ice_ocean_SIS2]
+
     runs = create_runs(args.mom_dir, configs)
     init_run_dirs(configs[:-1], args.mom_dir)
+    build_models(args.mom_dir, compilers, builds, memory_types, models)
 
     pbs = Pbs(args.ncpus)
-    slot_ids = pbs.start_session()
-    allocator = SlotAllocator(slot_ids)
+    node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
+    allocator = NodeAllocator(node_ids)
     scheduler = Scheduler(runs, pbs, allocator)
 
     scheduler.loop(runs, pbs, allocator)
