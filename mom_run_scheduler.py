@@ -7,6 +7,7 @@ import argparse
 import math
 import pexpect
 import itertools
+import multiprocessing as mp
 import re
 
 """
@@ -232,8 +233,19 @@ def init_run_dirs(configs, mom_dir):
                                 symlinks=True)
 
 
-def build_models(args.mom_dir, compilers, builds, memory_types, models):
-    pass
+def build_model(args)
+
+    model, compiler, build, memory_type = args
+    model.build(compiler, build, memory_type)
+
+def build_models(models, compilers, builds, memory_types):
+
+    args = []
+    for config in itertools.product([models, compilers, builds, memory_types]):
+        args.append(config)
+
+    mp.map(build_model, args)
+
 
 def discover_experiments(mom_dir):
     """
@@ -279,13 +291,13 @@ def main():
     exps = discover_experiments(args.mom_dir)
     configs = (compilers, builds, memory_types, analyzers, exps)
 
-    ocean_model = Model()
-    ice_ocean_SIS2 = Model()
+    ocean_model = Model('ocean_model', args.mom_dir)
+    ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
     models = [ocean_model, ice_ocean_SIS2]
+    build_models(models, compilers, builds, memory_types)
 
     runs = create_runs(args.mom_dir, configs)
     init_run_dirs(configs[:-1], args.mom_dir)
-    build_models(args.mom_dir, compilers, builds, memory_types, models)
 
     pbs = Pbs(args.ncpus)
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
