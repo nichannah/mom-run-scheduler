@@ -3,12 +3,15 @@
 from __future__ import print_function
 
 import os, sys, shutil
+import time
 import argparse
 import math
 import pexpect
-import itertools
+from itertools import product, chain
 import multiprocessing as mp
 import re
+
+from model import Model
 
 """
 Do as many MOM6 runs as quickly as possible. Ideally we need ~100 runs in less
@@ -22,8 +25,9 @@ will be executed in parallel as much as possible.
 class Experiment:
 
     def __init__(self, path, model):
-        self.path = path
+        self.orig_path = path
         self.model = model
+        self.name = path.split(model.name)[-1].strip('/')
 
 
 class NodeAllocator:
@@ -43,7 +47,7 @@ class NodeAllocator:
         start_idx = None
         num_found = 0
 
-        for i, v in enumerate(free_space_map):
+        for i, v in enumerate(self.free_space_map):
             if v:
                 if start_idx is None:
                     start_idx = i
@@ -56,7 +60,7 @@ class NodeAllocator:
                 num_found = 0
 
         if num_found == nnodes:
-            self.free_space_map[start_idx:start_idx+nnodes] = False
+            self.free_space_map[start_idx:start_idx+nnodes] = [False]*nnodes
             key = (start_idx, nnodes)
             allocated_nodes = self.node_ids[start_idx:start_idx+nnodes]
             return key, allocated_nodes
@@ -65,12 +69,12 @@ class NodeAllocator:
 
     def dealloc(self, key):
         start_idx, nnodes = key
-        self.free_space_map[start_idx:start_idx+nnodes] = True
+        self.free_space_map[start_idx:start_idx+nnodes] = [True]*nnodes
 
 
 class Run:
 
-    def __init__(self, mom_dir, compiler, build, memory_type, analyzer, model, exp):
+    def __init__(self, mom_dir, compiler, build, memory_type, analyzer, exp):
         self.compiler = compiler
         self.build = build
         self.memory_type = memory_type
@@ -83,17 +87,18 @@ class Run:
         self.status = 'NOT_RUN'
         self.alloc_key = None
 
-        dir = '_'.join([compiler, build, memory_type, analyzer, exp.path])
-        self.my_dir = os.path.join(mom_dir, dir)
-        self.exe = os.path.join(mom_dir, 'build', compiler, exp.model, build, 'MOM6')
+        dir = '_'.join([compiler, build, memory_type, analyzer, exp.model.name])
+        self.my_dir = os.path.join(mom_dir, dir, exp.name)
+        self.exe = os.path.join(mom_dir, 'build', compiler, exp.model.name,
+                                    build, memory_type, 'MOM6')
         self.output_file = os.path.join(self.my_dir, 'mom.out')
-        self.exe_cmd = '(mpirun --hosts {} -np {} {} &> {} ; echo {}) &'
+        self.exe_cmd = '(mpiexec --host {} -np {} {} &> {} ; echo {}) &'
 
-    def get_exe_cmd(self, node_ids)
+    def get_exe_cmd(self, node_ids):
 
         hosts = ','.join(node_ids)
-        cmd = self.my_exe_cmd.format(hosts, self.ncpus, self.exe,
-                                        self.output_file, 'Run complete')
+        cmd = self.exe_cmd.format(hosts, self.ncpus, self.exe,
+                                  self.output_file, 'Run complete')
         return cmd
 
     def update_status(self, output):
@@ -135,6 +140,9 @@ class Pbs:
 
         self.p_obj.sendline('cd {}'.format(run.my_dir))
         self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.sendline('mkdir -p RESTART')
+        self.p_obj.expect('\[.+\]\$ ')
+        print('executing: {}'.format(run.get_exe_cmd(nodes)))
         self.p_obj.sendline(run.get_exe_cmd(nodes))
         self.p_obj.expect('\[.+\]\$ ')
 
@@ -148,7 +156,6 @@ class Pbs:
         self.p_obj.expect('\[.+\]\$ ')
         run.update_status(self.p_obj.before)
 
-
     def parse_nodefile(self, string):
 
         matches = re.findall('r\d+', string, flags=re.MULTILINE)
@@ -161,6 +168,8 @@ class Scheduler:
         self.queued_runs = sorted(runs, key=lambda x : x.nnodes, reverse=True)
         self.in_progress_runs = []
         self.completed_runs = []
+        self.allocator = allocator
+        self.pbs = pbs
 
     def find_largest_queued_run_smaller_than(self, try_size):
         if try_size == -1:
@@ -174,42 +183,50 @@ class Scheduler:
 
     def loop(self):
 
-        while len(queue_runs) > 0:
+        def update_run_status(run):
+            self.pbs.update_run_status(run)
+            if run.status == 'FINISHED':
+                self.in_progress_runs.remove(run)
+                self.completed_runs.append(run)
+                self.allocator.dealloc(run.alloc_key)
+
+        while len(self.queued_runs) > 0:
 
             # Cycle through all queued runs trying to start a new one.
             try_size = -1
             for i, _ in enumerate(self.queued_runs):
-                run = find_largest_queued_run_smaller_than(try_size)
+                run = self.find_largest_queued_run_smaller_than(try_size)
                 if run is None:
                     break
-                key, nodes = allocator.alloc(run.nnodes)
+                key, nodes = self.allocator.alloc(run.nnodes)
                 if key:
-                    in_progress_runs.append(run)
-                    queued_runs.remove(run)
+                    self.in_progress_runs.append(run)
+                    self.queued_runs.remove(run)
                     run.alloc_key = key
-                    pbs.start_run(run, nodes)
+                    self.pbs.start_run(run, nodes)
                     break
                 else:
                     try_size = run.nnodes
 
             # Cycle through all in progress runs seeing if any have finished.
-            for run in in_progress_runs:
-                pbs.update_run_status(run)
-                if run.status == 'FINISHED':
-                    in_progress_runs.remove(run)
-                    completed_runs.append(run)
-                    allocator.dealloc(run.alloc_key)
+            for run in self.in_progress_runs:
+                update_run_status(run)
 
             time.sleep(1)
 
+        while len(self.in_progress_runs) > 0:
+            for run in self.in_progress_runs:
+                update_run_status(run)
+            time.sleep(5)
 
-def create_runs(mom_dir, exps, configs):
+
+def create_runs(mom_dir, configs):
     """
     Return a list of all run objs
     """
 
     runs = []
-    for args in itertools.product(*configs):
+    for args in product(*configs):
         runs.append(Run(mom_dir, *args))
 
     return runs
@@ -220,7 +237,7 @@ def init_run_dirs(configs, mom_dir):
     Assume that code has been downlowded. Setup run directories.
     """
 
-    for args in itertools.product(*configs):
+    for args in product(*configs):
         new_dir = os.path.join(mom_dir, '_'.join(args).strip('_') + \
                     '_ocean_only')
         if not os.path.exists(new_dir):
@@ -233,7 +250,7 @@ def init_run_dirs(configs, mom_dir):
                                 symlinks=True)
 
 
-def build_model(args)
+def build_model(args):
 
     model, compiler, build, memory_type = args
     model.build(compiler, build, memory_type)
@@ -241,13 +258,16 @@ def build_model(args)
 def build_models(models, compilers, builds, memory_types):
 
     args = []
-    for config in itertools.product([models, compilers, builds, memory_types]):
+    for config in product(models, compilers, builds, memory_types):
         args.append(config)
 
-    mp.map(build_model, args)
+    p = mp.Pool()
+    p.map(build_model, args)
+    p.close()
+    p.join()
 
 
-def discover_experiments(mom_dir):
+def discover_experiments(mom_dir, models):
     """
     Return a list of all experiment paths relative to the top of the mom dir.
     """
@@ -259,18 +279,21 @@ def discover_experiments(mom_dir):
         return path.strip('/')
 
     exps = []
-    for path, dirs, filenames in os.walk(mom_dir):
+    paths = [os.path.join(mom_dir, m.name) for m in models]
+    for path, dirs, filenames in chain.from_iterable(os.walk(p) for p in paths):
         for fname in filenames:
             if fname == 'input.nml' and 'common' not in path:
                 model = None
-                if 'ocean_only' in path:
-                    model = 'ocean_only'
-                if 'ice_ocean_sis2' in path:
-                    model = 'ice_ocean_sis2'
+                for m in models:
+                    if m.name in path:
+                        model = m
+                        break
 
                 if model:
-                    e = Experiment(fix_exp_path(path, mom_dir), model)
-                    exps.append(e)
+                    # FIXME: a single exeriment for now
+                    if 'double_gyre' in path:
+                        e = Experiment(fix_exp_path(path, mom_dir), model)
+                        exps.append(e)
     return exps
 
 
@@ -284,16 +307,20 @@ def main():
 
     args.mom_dir = os.path.realpath(args.mom_dir)
 
-    compilers = ['intel', 'gnu']
-    builds = ['debug', 'repro']
+    #compilers = ['intel', 'gnu']
+    compilers = ['intel']
+    #builds = ['debug', 'repro']
+    builds = ['debug']
     memory_types = ['dynamic_symmetric']
-    analyzers = ['', 'valgrind']
-    exps = discover_experiments(args.mom_dir)
+    #analyzers = ['none', 'valgrind']
+    analyzers = ['none']
+    ocean_only = Model('ocean_only', args.mom_dir)
+    ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
+    models = [ocean_only, ice_ocean_SIS2]
+
+    exps = discover_experiments(args.mom_dir, models)
     configs = (compilers, builds, memory_types, analyzers, exps)
 
-    ocean_model = Model('ocean_model', args.mom_dir)
-    ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
-    models = [ocean_model, ice_ocean_SIS2]
     build_models(models, compilers, builds, memory_types)
 
     runs = create_runs(args.mom_dir, configs)
@@ -303,8 +330,7 @@ def main():
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
     allocator = NodeAllocator(node_ids)
     scheduler = Scheduler(runs, pbs, allocator)
-
-    scheduler.loop(runs, pbs, allocator)
+    scheduler.loop()
 
 if __name__ == '__main__':
     sys.exit(main())

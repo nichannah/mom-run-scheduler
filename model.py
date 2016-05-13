@@ -21,7 +21,7 @@ source ../../../../../mkmf/env/{site}-{compiler}.env && make NETCDF=3 {build}=1 
 
 _build_ocean_ice_script = """
 pwd &&
-../../../../../mkmf/bin/list_paths ./ ../../../../../src/MOM6/config_src/{{{memory_type},coupled_driver}} ../../../../../src/MOM6/src/{{*,*/*}}/ ../../../../../src/{{atmos_null,coupler,land_null,ice_param,SIS2,FMS/coupler,FMS/include}} &&
+../../../../../mkmf/bin/list_paths ./ ../../../../../src/MOM6/config_src/{{{memory_type},coupled_driver}} ../../../../../src/MOM6/src/{{*,*/*}}/ ../../../../../src/{{atmos_null,coupler,land_null,SIS2,ice_ocean_extras,icebergs,FMS/coupler,FMS/include}} &&
 ../../../../../mkmf/bin/mkmf -t ../../../../../mkmf/templates/{site}-{compiler}.mk -o '-I../../../shared/{build}' -p 'MOM6 -L../../../shared/{build} -lfms' -c '-Duse_libMPI -Duse_netCDF -DSPMD -DUSE_LOG_DIAG_FIELD_INFO' path_names &&
 source ../../../../../mkmf/env/{site}-{compiler}.env && make NETCDF=3 {build}=1 MOM6 -j
 """
@@ -54,7 +54,7 @@ class Model:
         shared_dir = os.path.join(self.build_dir, compiler, 'shared', build)
         mkdir_p(shared_dir)
         os.chdir(shared_dir)
-        command = _build_fms_script.format(site=self.site, build=build_kind,
+        command = _build_fms_script.format(site=self.site, build=build,
                                            compiler=compiler)
         try:
             output = sp.check_output(command, stderr=sp.STDOUT, shell=True)
@@ -68,17 +68,21 @@ class Model:
             return ret
 
         # Build either ocean_only or ice and ocean.
-        model_dir = os.path.join(_build_dir, compiler, self.name, build, memory_type)
+        model_dir = os.path.join(self.build_dir, compiler, self.name, build,
+                                    memory_type)
         mkdir_p(model_dir)
         os.chdir(model_dir)
         if self.name == 'ocean_only':
             command = _build_ocean_script.format(site=self.site, build=build,
                                                  compiler=compiler,
                                                  memory_type=memory_type)
-        else:
+        elif self.name == 'ice_ocean_SIS2':
             command = _build_ocean_ice_script.format(site=self.site, build=build,
                                                      compiler=compiler,
                                                      memory_type=memory_type)
+        else:
+            print('Bad model type', file=sys.stderr)
+            assert False
         try:
             output = sp.check_output(command, stderr=sp.STDOUT, shell=True)
         except sp.CalledProcessError as e:
