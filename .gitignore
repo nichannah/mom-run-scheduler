@@ -1,5 +1,6 @@
 MOM6-examples
 MOM6-examples.clean
+MOM6-examples.dirty
 .*.swp
 
 # Byte-compiled / optimized / DLL files

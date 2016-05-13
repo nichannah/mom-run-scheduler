@@ -44,9 +44,10 @@ class Model:
         self.site = 'raijin'
 
     def build(self, compiler, build, memory_type):
-        """
-        Build this model.
-        """
+        self.build_shared(compiler, build)
+        self.build_model(compiler, build, memory_type)
+
+    def build_shared(self, compiler, build):
         saved_path = os.getcwd()
         ret = 0
 
@@ -64,8 +65,15 @@ class Model:
         finally:
             os.chdir(saved_path)
 
-        if ret != 0:
-            return ret
+        return ret
+
+
+    def build_model(self, compiler, build, memory_type):
+        """
+        Build this model.
+        """
+        saved_path = os.getcwd()
+        ret = 0
 
         # Build either ocean_only or ice and ocean.
         model_dir = os.path.join(self.build_dir, compiler, self.name, build,
@@ -81,7 +89,7 @@ class Model:
                                                      compiler=compiler,
                                                      memory_type=memory_type)
         else:
-            print('Bad model type', file=sys.stderr)
+            print('Unsupported model type', file=sys.stderr)
             assert False
         try:
             output = sp.check_output(command, stderr=sp.STDOUT, shell=True)

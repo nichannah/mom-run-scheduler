@@ -22,6 +22,8 @@ a single large PBS session and schedule all runs within that session. The runs
 will be executed in parallel as much as possible.
 """
 
+_valgrind_cmd = '-x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind//libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=2000000000 --max-stackframe=2000000000 --error-limit=no --track-origins=yes --gen-suppressions=all --suppressions=/short/v45/nah599/more_home/MOM6-examples/tools/tests/valgrind_suppressions.txt'
+
 class Experiment:
 
     def __init__(self, path, model):
@@ -42,7 +44,7 @@ class NodeAllocator:
         """
 
         if sum(self.free_space_map) < nnodes:
-            return None
+            return None, None
 
         start_idx = None
         num_found = 0
@@ -65,7 +67,7 @@ class NodeAllocator:
             allocated_nodes = self.node_ids[start_idx:start_idx+nnodes]
             return key, allocated_nodes
         else:
-            return None
+            return None, None
 
     def dealloc(self, key):
         start_idx, nnodes = key
@@ -78,10 +80,13 @@ class Run:
         self.compiler = compiler
         self.build = build
         self.memory_type = memory_type
-        self.analyzer = analyzer
         self.exp= exp
         self.ncpus = 8
         self.nnodes = int(math.ceil(self.ncpus / 16.))
+
+        self.analyzer_cmd = ''
+        if analyzer == 'valgrind':
+            self.analyzer_cmd = _valgrind_cmd
 
         self.output = ''
         self.status = 'NOT_RUN'
@@ -92,13 +97,18 @@ class Run:
         self.exe = os.path.join(mom_dir, 'build', compiler, exp.model.name,
                                     build, memory_type, 'MOM6')
         self.output_file = os.path.join(self.my_dir, 'mom.out')
-        self.exe_cmd = '(mpiexec --host {} -np {} {} &> {} ; echo {}) &'
+
+        self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
+                         ' {} &> {} ; echo {} $? >> {}) &'
+
 
     def get_exe_cmd(self, node_ids):
 
         hosts = ','.join(node_ids)
         cmd = self.exe_cmd.format(hosts, self.ncpus, self.exe,
-                                  self.output_file, 'Run complete')
+                                  self.output_file,
+                                  'Run complete, exit code: ',
+                                  self.output_file)
         return cmd
 
     def update_status(self, output):
@@ -250,19 +260,19 @@ def init_run_dirs(configs, mom_dir):
                                 symlinks=True)
 
 
-def build_model(args):
+def build_shared(args):
+    model, compiler, build = args
+    model.build_shared(compiler, build)
 
+def build_model(args):
     model, compiler, build, memory_type = args
-    model.build(compiler, build, memory_type)
+    model.build_model(compiler, build, memory_type)
 
 def build_models(models, compilers, builds, memory_types):
 
-    args = []
-    for config in product(models, compilers, builds, memory_types):
-        args.append(config)
-
     p = mp.Pool()
-    p.map(build_model, args)
+    p.map(build_shared, product([models[0]], compilers, builds))
+    p.map(build_model, product(models, compilers, builds, memory_types))
     p.close()
     p.join()
 
@@ -290,10 +300,8 @@ def discover_experiments(mom_dir, models):
                         break
 
                 if model:
-                    # FIXME: a single exeriment for now
-                    if 'double_gyre' in path:
-                        e = Experiment(fix_exp_path(path, mom_dir), model)
-                        exps.append(e)
+                    e = Experiment(fix_exp_path(path, mom_dir), model)
+                    exps.append(e)
     return exps
 
 
@@ -307,13 +315,10 @@ def main():
 
     args.mom_dir = os.path.realpath(args.mom_dir)
 
-    #compilers = ['intel', 'gnu']
-    compilers = ['intel']
-    #builds = ['debug', 'repro']
-    builds = ['debug']
-    memory_types = ['dynamic_symmetric']
-    #analyzers = ['none', 'valgrind']
-    analyzers = ['none']
+    compilers = ['intel', 'gnu']
+    builds = ['debug', 'repro']
+    memory_types = ['dynamic', 'dynamic_symmetric']
+    analyzers = ['none', 'valgrind']
     ocean_only = Model('ocean_only', args.mom_dir)
     ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
     models = [ocean_only, ice_ocean_SIS2]
