@@ -12,6 +12,7 @@ import multiprocessing as mp
 import re
 
 from model import Model
+import exp_resources
 
 """
 Do as many MOM6 runs as quickly as possible. Ideally we need ~100 runs in less
@@ -30,6 +31,7 @@ class Experiment:
         self.orig_path = path
         self.model = model
         self.name = path.split(model.name)[-1].strip('/')
+        self.min_cpus = exp_resources.min_cpus.get(self.name, None)
 
 
 class NodeAllocator:
@@ -73,6 +75,9 @@ class NodeAllocator:
         start_idx, nnodes = key
         self.free_space_map[start_idx:start_idx+nnodes] = [True]*nnodes
 
+    def max_available_nodes(self):
+        return len(self.free_space_map)
+
 
 class Run:
 
@@ -81,7 +86,9 @@ class Run:
         self.build = build
         self.memory_type = memory_type
         self.exp= exp
-        self.ncpus = 8
+        self.ncpus = 16
+        if exp.min_cpus:
+            self.ncpus = exp.min_cpus
         self.nnodes = int(math.ceil(self.ncpus / 16.))
 
         self.analyzer_cmd = ''
@@ -116,26 +123,32 @@ class Run:
         if 'Run complete' in output:
             self.status = 'FINISHED'
 
+    def set_wont_run(self, reason):
+        with open(self.output_file, 'w') as f:
+            f.write("Can't run, insuffient nodes.\n")
+
+
 class Pbs:
 
     def __init__(self, ncpus):
         self.ncpus = ncpus
         self.cmd = 'qsub -I -P v45 -q express -l ncpus={},mem={}Gb,walltime=1:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
+        self.prompt = '\[{}@.+\]\$ '.format(os.environ['USER'])
 
     def start_session(self, submit_qsub=True):
 
         if submit_qsub:
             self.p_obj = pexpect.spawn(self.cmd, timeout=None)
-            self.p_obj.expect('\[.+\]\$ ')
+            self.p_obj.expect(self.prompt)
         else:
             self.p_obj = pexpect.spawn('bash')
-            self.p_obj.expect('\[.+\]\$ ')
+            self.p_obj.expect(self.prompt)
 
         self.p_obj.sendline('module load openmpi/1.8.4')
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
         self.p_obj.sendline('cat $PBS_NODEFILE')
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
         nodes = self.parse_nodefile(self.p_obj.before)
 
         return nodes
@@ -149,12 +162,12 @@ class Pbs:
         run.status = 'IN_PROGRESS'
 
         self.p_obj.sendline('cd {}'.format(run.my_dir))
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
         self.p_obj.sendline('mkdir -p RESTART')
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
         print('executing: {}'.format(run.get_exe_cmd(nodes)))
         self.p_obj.sendline(run.get_exe_cmd(nodes))
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
 
 
     def update_run_status(self, run):
@@ -163,7 +176,7 @@ class Pbs:
         """
 
         self.p_obj.sendline('cat ' + run.output_file)
-        self.p_obj.expect('\[.+\]\$ ')
+        self.p_obj.expect(self.prompt)
         run.update_status(self.p_obj.before)
 
     def parse_nodefile(self, string):
@@ -171,15 +184,27 @@ class Pbs:
         matches = re.findall('r\d+', string, flags=re.MULTILINE)
         return list(set(matches))
 
+
 class Scheduler:
 
     def __init__(self, runs, pbs, allocator):
 
-        self.queued_runs = sorted(runs, key=lambda x : x.nnodes, reverse=True)
         self.in_progress_runs = []
         self.completed_runs = []
         self.allocator = allocator
         self.pbs = pbs
+
+        # Remove any runs which can't be run.
+        self.queued_runs = []
+        for r in runs:
+            if r.nnodes > allocator.max_available_nodes():
+                r.set_wont_run('Insuffient nodes')
+                self.completed_runs.append(r)
+            else:
+                self.queued_runs.append(r)
+                
+        self.queued_runs.sort(key=lambda x : x.nnodes, reverse=True)
+
 
     def find_largest_queued_run_smaller_than(self, try_size):
         if try_size == -1:
