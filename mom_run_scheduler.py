@@ -175,9 +175,9 @@ class Pbs:
         Update the stdout, stderr of a current run.
         """
 
-        self.p_obj.sendline('cat ' + run.output_file)
-        self.p_obj.expect(self.prompt)
-        run.update_status(self.p_obj.before)
+        if os.path.exists(run.output_file):
+            with open(run.output_file, 'r') as f:
+                run.update_status(f.read())
 
     def parse_nodefile(self, string):
 
