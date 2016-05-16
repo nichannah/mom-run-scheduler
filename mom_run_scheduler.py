@@ -12,6 +12,7 @@ import multiprocessing as mp
 import re
 
 from model import Model
+from mom_setup import get_code, get_input_data
 import exp_resources
 
 """
@@ -202,7 +203,7 @@ class Scheduler:
                 self.completed_runs.append(r)
             else:
                 self.queued_runs.append(r)
-                
+
         self.queued_runs.sort(key=lambda x : x.nnodes, reverse=True)
 
 
@@ -262,6 +263,8 @@ def create_runs(mom_dir, configs):
 
     runs = []
     for args in product(*configs):
+        if 'valgrind' in args and 'REPRO' in args:
+            continue
         runs.append(Run(mom_dir, *args))
 
     return runs
@@ -333,15 +336,22 @@ def discover_experiments(mom_dir, models):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('mom_dir', help='Path to MOM6-examples')
+    parser.add_argument('mom_dir',
+        help="Path to MOM6-examples, will be downloaded if it doesn't exist")
     parser.add_argument('--ncpus', default=16, type=int)
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
     args = parser.parse_args()
 
     args.mom_dir = os.path.realpath(args.mom_dir)
 
+    if not os.path.exists(args.mom_dir):
+        get_code(args.mom_dir)
+
+    if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
+        get_input_data(os.path.join(args.mom_dir, '.datasets'))
+
     compilers = ['intel', 'gnu']
-    builds = ['debug', 'repro']
+    builds = ['DEBUG', 'REPRO']
     memory_types = ['dynamic', 'dynamic_symmetric']
     analyzers = ['none', 'valgrind']
     ocean_only = Model('ocean_only', args.mom_dir)
