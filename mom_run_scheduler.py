@@ -133,7 +133,7 @@ class Pbs:
 
     def __init__(self, ncpus):
         self.ncpus = ncpus
-        self.cmd = 'qsub -I -P v45 -q express -l ncpus={},mem={}Gb,walltime=1:00:00'.format(ncpus, ncpus*2)
+        self.cmd = 'qsub -I -P e14 -q normal -l ncpus={},mem={}Gb,walltime=5:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
         self.prompt = '\[{}@.+\]\$ '.format(os.environ['USER'])
 
@@ -263,7 +263,9 @@ def create_runs(mom_dir, configs):
 
     runs = []
     for args in product(*configs):
-        if 'valgrind' in args and 'REPRO' in args:
+        if 'valgrind' in args and 'DEBUG' not in args:
+            continue
+        if 'valgrind' in args and 'intel' not in args:
             continue
         runs.append(Run(mom_dir, *args))
 
