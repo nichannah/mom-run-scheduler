@@ -226,6 +226,8 @@ class Scheduler:
                 self.completed_runs.append(run)
                 self.allocator.dealloc(run.alloc_key)
 
+        start_time = time.time()
+
         while len(self.queued_runs) > 0:
 
             # Cycle through all queued runs trying to start a new one.
@@ -255,6 +257,8 @@ class Scheduler:
                 update_run_status(run)
             time.sleep(5)
 
+        print('Scheduler ran {} jobs in {} minutes.'.format(len(self.completed_runs),
+                                                            (time.time() - start_time) / 60.))
 
 def create_runs(mom_dir, configs):
     """
@@ -373,6 +377,7 @@ def main():
     allocator = NodeAllocator(node_ids)
     scheduler = Scheduler(runs, pbs, allocator)
     scheduler.loop()
+
 
 if __name__ == '__main__':
     sys.exit(main())
