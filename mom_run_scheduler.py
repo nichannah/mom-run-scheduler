@@ -73,6 +73,7 @@ class NodeAllocator:
             return None, None
 
     def dealloc(self, key):
+        assert key is not None
         start_idx, nnodes = key
         self.free_space_map[start_idx:start_idx+nnodes] = [True]*nnodes
 
@@ -82,7 +83,7 @@ class NodeAllocator:
 
 class Run:
 
-    def __init__(self, mom_dir, compiler, build, memory_type, analyzer, exp):
+    def __init__(self, mom_dir, exp, compiler, build, memory_type, analyzer):
         self.compiler = compiler
         self.build = build
         self.memory_type = memory_type
@@ -100,11 +101,16 @@ class Run:
         self.status = 'NOT_RUN'
         self.alloc_key = None
 
+        self.start_time = None
+        self.runtime = None
+
         dir = '_'.join([compiler, build, memory_type, analyzer, exp.model.name])
         self.my_dir = os.path.join(mom_dir, dir, exp.name)
         self.exe = os.path.join(mom_dir, 'build', compiler, exp.model.name,
                                     build, memory_type, 'MOM6')
         self.output_file = os.path.join(self.my_dir, 'mom.out')
+        if os.path.exists(self.output_file):
+            os.remove(self.output_file)
 
         self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
                          ' {} &> {} ; echo {} $? >> {}) &'
@@ -119,10 +125,15 @@ class Run:
                                   self.output_file)
         return cmd
 
-    def update_status(self, output):
-        self.output = output
-        if 'Run complete' in output:
-            self.status = 'FINISHED'
+
+    def update_status(self):
+        if os.path.exists(self.output_file):
+            with open(self.output_file, 'r') as f:
+                output = f.read()
+                if 'Run complete' in output:
+                    self.status = 'FINISHED'
+                    self.runtime = time.time() - self.start_time
+
 
     def set_wont_run(self, reason):
         with open(self.output_file, 'w') as f:
@@ -161,6 +172,7 @@ class Pbs:
         """
 
         run.status = 'IN_PROGRESS'
+        run.start_time = time.time()
 
         self.p_obj.sendline('cd {}'.format(run.my_dir))
         self.p_obj.expect(self.prompt)
@@ -169,16 +181,6 @@ class Pbs:
         print('executing: {}'.format(run.get_exe_cmd(nodes)))
         self.p_obj.sendline(run.get_exe_cmd(nodes))
         self.p_obj.expect(self.prompt)
-
-
-    def update_run_status(self, run):
-        """
-        Update the stdout, stderr of a current run.
-        """
-
-        if os.path.exists(run.output_file):
-            with open(run.output_file, 'r') as f:
-                run.update_status(f.read())
 
     def parse_nodefile(self, string):
 
@@ -220,11 +222,12 @@ class Scheduler:
     def loop(self):
 
         def update_run_status(run):
-            self.pbs.update_run_status(run)
+            run.update_status()
             if run.status == 'FINISHED':
                 self.in_progress_runs.remove(run)
                 self.completed_runs.append(run)
                 self.allocator.dealloc(run.alloc_key)
+                run.alloc_key = None
 
         start_time = time.time()
 
@@ -232,7 +235,7 @@ class Scheduler:
 
             # Cycle through all queued runs trying to start a new one.
             try_size = -1
-            for i, _ in enumerate(self.queued_runs):
+            for i in range(len(self.queued_runs)):
                 run = self.find_largest_queued_run_smaller_than(try_size)
                 if run is None:
                     break
@@ -247,51 +250,63 @@ class Scheduler:
                     try_size = run.nnodes
 
             # Cycle through all in progress runs seeing if any have finished.
-            for run in self.in_progress_runs:
+            tmp_list = self.in_progress_runs[:]
+            for run in tmp_list:
                 update_run_status(run)
 
             time.sleep(1)
 
+        print('Waiting for runs to terminate:')
+        for r in self.in_progress_runs:
+            print('{} currently running for {} minutes.'.format(r.my_dir,
+                                            (time.time() - r.start_time) / 60.))
+
         while len(self.in_progress_runs) > 0:
-            for run in self.in_progress_runs:
+            tmp_list = self.in_progress_runs[:]
+            for run in tmp_list:
                 update_run_status(run)
             time.sleep(5)
 
         print('Scheduler ran {} jobs in {} minutes.'.format(len(self.completed_runs),
                                                             (time.time() - start_time) / 60.))
 
-def create_runs(mom_dir, configs):
+
+def create_runs(mom_dir, exps, configs):
     """
     Return a list of all run objs
     """
 
     runs = []
-    for args in product(*configs):
+    for args in product([mom_dir], exps, *configs):
         if 'valgrind' in args and 'DEBUG' not in args:
             continue
         if 'valgrind' in args and 'intel' not in args:
             continue
-        runs.append(Run(mom_dir, *args))
+        runs.append(Run(*args))
 
     return runs
 
 
-def init_run_dirs(configs, mom_dir):
+def get_config_run_dir(mom_dir, model_name, compiler, build, memory, analyzer):
+
+    d = compiler + '_' + build + '_' + memory + '_' + analyzer + '_' + model_name
+    return os.path.join(mom_dir, d)
+
+
+def init_run_dirs(mom_dir, model_names, configs):
     """
     Assume that code has been downlowded. Setup run directories.
     """
 
-    for args in product(*configs):
-        new_dir = os.path.join(mom_dir, '_'.join(args).strip('_') + \
-                    '_ocean_only')
+    for args in product([mom_dir], model_names, *configs):
+        new_dir = get_config_run_dir(*args)
         if not os.path.exists(new_dir):
-            shutil.copytree(os.path.join(mom_dir, 'ocean_only'), new_dir,
-                                symlinks=True)
-        new_dir = os.path.join(mom_dir, '_'.join(args).strip('_') + \
-                    '_ice_ocean_SIS2')
-        if not os.path.exists(new_dir):
-            shutil.copytree(os.path.join(mom_dir, 'ice_ocean_SIS2'), new_dir,
-                                symlinks=True)
+            if 'ocean_only' in new_dir:
+                shutil.copytree(os.path.join(mom_dir, 'ocean_only'),
+                                new_dir, symlinks=True)
+            elif 'ice_ocean_SIS2' in new_dir:
+                shutil.copytree(os.path.join(mom_dir, 'ice_ocean_SIS2'),
+                                new_dir, symlinks=True)
 
 
 def build_shared(args):
@@ -335,7 +350,8 @@ def discover_experiments(mom_dir, models):
 
                 if model:
                     e = Experiment(fix_exp_path(path, mom_dir), model)
-                    exps.append(e)
+                    if 'double_gyre' in e.name:
+                        exps.append(e)
     return exps
 
 
@@ -360,17 +376,18 @@ def main():
     builds = ['DEBUG', 'REPRO']
     memory_types = ['dynamic', 'dynamic_symmetric']
     analyzers = ['none', 'valgrind']
+    model_names = ['ocean_only', 'ice_ocean_SIS2']
+
     ocean_only = Model('ocean_only', args.mom_dir)
     ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
     models = [ocean_only, ice_ocean_SIS2]
-
-    exps = discover_experiments(args.mom_dir, models)
-    configs = (compilers, builds, memory_types, analyzers, exps)
-
     build_models(models, compilers, builds, memory_types)
 
-    runs = create_runs(args.mom_dir, configs)
-    init_run_dirs(configs[:-1], args.mom_dir)
+    exps = discover_experiments(args.mom_dir, models)
+    configs = (compilers, builds, memory_types, analyzers)
+
+    runs = create_runs(args.mom_dir, exps, configs)
+    init_run_dirs(args.mom_dir, model_names, configs)
 
     pbs = Pbs(args.ncpus)
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))

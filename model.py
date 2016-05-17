@@ -35,12 +35,19 @@ def mkdir_p(path):
         if exc.errno != errno.EEXIST:
             raise
 
+def get_shared_build_dir(mom_dir, compiler, build):
+    return os.path.join(mom_dir, 'build', compiler, 'shared', build)
+
+
+def get_model_build_dir(mom_dir, compiler, model_name, build, memory_type):
+    return os.path.join(mom_dir, 'build', compiler, model_name, build,
+                         memory_type)
+
 class Model:
 
     def __init__(self, name, mom_dir):
         self.name = name
         self.mom_dir = mom_dir
-        self.build_dir = os.path.join(self.mom_dir, 'build')
         self.site = 'raijin'
 
     def build(self, compiler, build, memory_type):
@@ -52,7 +59,7 @@ class Model:
         ret = 0
 
         # Build FMS
-        shared_dir = os.path.join(self.build_dir, compiler, 'shared', build)
+        shared_dir = get_shared_build_dir(self.mom_dir, compiler, build)
         mkdir_p(shared_dir)
         os.chdir(shared_dir)
         command = _build_fms_script.format(site=self.site, build=build,
@@ -66,7 +73,7 @@ class Model:
             os.chdir(saved_path)
 
         with open(os.path.join(shared_dir, 'build.out'), 'w') as f:
-            f.write(output) 
+            f.write(output)
 
         return ret
 
@@ -79,8 +86,9 @@ class Model:
         ret = 0
 
         # Build either ocean_only or ice and ocean.
-        model_dir = os.path.join(self.build_dir, compiler, self.name, build,
-                                    memory_type)
+
+        model_dir = get_model_build_dir(self.mom_dir, compiler, self.name,
+                                        build, memory_type)
         mkdir_p(model_dir)
         os.chdir(model_dir)
         if self.name == 'ocean_only':
