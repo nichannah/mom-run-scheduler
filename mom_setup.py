@@ -17,6 +17,7 @@ def get_input_data(dest_dir):
     """
 
     sh.ln('-s', '$HOME/more_home/Download/datasets', dest_dir)
+    sh.ln('-s', '/short/v45/nah599/more_home/Download/datasets', dest_dir)
 
     # FIXME: perhaps this would be better.
     #sh.aws('s3', 'cp', 's3://mom6/datasets.2015.04.24.tgz', mom_dir)
