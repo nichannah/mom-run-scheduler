@@ -350,8 +350,7 @@ def discover_experiments(mom_dir, models):
 
                 if model:
                     e = Experiment(fix_exp_path(path, mom_dir), model)
-                    if 'double_gyre' in e.name:
-                        exps.append(e)
+                    exps.append(e)
     return exps
 
 
