@@ -7,11 +7,11 @@ from model import get_model_build_dir
 from mom_run_scheduler import get_config_run_dir
 
 def pytest_addoption(parser):
-    parser.addoption('--mom_dir', default='./MOM6-examples',
-                     help="Path to the MOM top-level dir.")
+    #parser.addoption('--mom_dir', default='./MOM6-examples',
+    #                 help="Path to the MOM top-level dir.")
     parser.addoption('--exp', default='ocean_only-double_gyre')
-    parser.addoption('--build', default='DEBUG')
     parser.addoption('--compiler', default='intel')
+    parser.addoption('--build', default='DEBUG')
     parser.addoption('--memory_type', default='dynamic')
     parser.addoption('--analyzer', default='none')
 
@@ -37,7 +37,8 @@ def pytest_generate_tests(metafunc):
     Parameterize tests, just pass the command line options to the test.
     """
 
-    mom_dir = metafunc.config.option.mom_dir
+    #mom_dir = metafunc.config.option.mom_dir
+    mom_dir = './MOM6-examples'
     exps = [metafunc.config.option.exp]
     exp_paths = [e.replace('-', '/') for e in exps]
 
