@@ -93,6 +93,7 @@ class Run:
             self.ncpus = exp.min_cpus
         self.nnodes = int(math.ceil(self.ncpus / 16.))
 
+        self.analyzer = analyzer
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':
             self.analyzer_cmd = _valgrind_cmd
@@ -147,6 +148,7 @@ class Pbs:
         self.cmd = 'qsub -I -P e14 -q normal -l ncpus={},mem={}Gb,walltime=5:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
         self.prompt = '\[{}@.+\]\$ '.format(os.environ['USER'])
+        self.pbs_job_id = None
 
     def start_session(self, submit_qsub=True):
 
@@ -162,8 +164,17 @@ class Pbs:
         self.p_obj.sendline('cat $PBS_NODEFILE')
         self.p_obj.expect(self.prompt)
         nodes = self.parse_nodefile(self.p_obj.before)
+        self.p_obj.sendline('echo $PBS_JOBID')
+        self.p_obj.expect(self.prompt)
+        self.pbs_jobid = self.parse_jobid(self.p_obj.before)
 
         return nodes
+
+    def check_session_alive(self):
+        """
+        Check whether the session has been terminated.
+        """
+        return True
 
 
     def start_run(self, run, nodes):
@@ -187,6 +198,11 @@ class Pbs:
         matches = re.findall('r\d+', string, flags=re.MULTILINE)
         return list(set(matches))
 
+    def parse_jobid(self, string):
+
+        match = re.match('\d+\.r-man2', string)
+        return match.group(0)
+
 
 class Scheduler:
 
@@ -206,7 +222,17 @@ class Scheduler:
             else:
                 self.queued_runs.append(r)
 
-        self.queued_runs.sort(key=lambda x : x.nnodes, reverse=True)
+        # Put valgrind runs first because they take so long.
+        self.queued_runs.sort(key=lambda r : r.analyzer == 'valgrind', reverse=True)
+        # Now sort according to size.
+        self.queued_runs.sort(key=lambda r : r.nnodes, reverse=True)
+
+
+    def print_report(self):
+        """
+        """
+        print('Scheduler ran {} jobs in {} minutes.'.format(len(self.completed_runs),
+                                                            (time.time() - start_time) / 60.))
 
 
     def find_largest_queued_run_smaller_than(self, try_size):
@@ -228,6 +254,9 @@ class Scheduler:
                 self.completed_runs.append(run)
                 self.allocator.dealloc(run.alloc_key)
                 run.alloc_key = None
+                return True
+            else:
+                return False
 
         start_time = time.time()
 
@@ -254,21 +283,21 @@ class Scheduler:
             for run in tmp_list:
                 update_run_status(run)
 
-            time.sleep(1)
+            if not self.pbs.check_session_alive():
+                break
 
-        print('Waiting for runs to terminate:')
-        for r in self.in_progress_runs:
-            print('{} currently running for {} minutes.'.format(r.my_dir,
-                                            (time.time() - r.start_time) / 60.))
+            time.sleep(1)
 
         while len(self.in_progress_runs) > 0:
             tmp_list = self.in_progress_runs[:]
             for run in tmp_list:
-                update_run_status(run)
+                finished = update_run_status(run)
+
+            if not self.pbs.check_session_alive():
+                break
             time.sleep(5)
 
-        print('Scheduler ran {} jobs in {} minutes.'.format(len(self.completed_runs),
-                                                            (time.time() - start_time) / 60.))
+        self.print_report()
 
 
 def create_runs(mom_dir, exps, configs):
