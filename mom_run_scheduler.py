@@ -148,7 +148,7 @@ class Pbs:
         self.cmd = 'qsub -I -P e14 -q normal -l ncpus={},mem={}Gb,walltime=5:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
         self.prompt = '\[{}@.+\]\$ '.format(os.environ['USER'])
-        self.pbs_job_id = None
+
 
     def start_session(self, submit_qsub=True):
 
@@ -164,17 +164,23 @@ class Pbs:
         self.p_obj.sendline('cat $PBS_NODEFILE')
         self.p_obj.expect(self.prompt)
         nodes = self.parse_nodefile(self.p_obj.before)
-        self.p_obj.sendline('echo $PBS_JOBID')
-        self.p_obj.expect(self.prompt)
-        self.pbs_jobid = self.parse_jobid(self.p_obj.before)
 
         return nodes
 
+
     def check_session_alive(self):
         """
-        Check whether the session has been terminated.
+        Check whether the PBS session is still alive.
         """
-        return True
+
+        self.p_obj.sendline('echo $PBS_JOBID')
+        self.p_obj.expect(self.prompt)
+        pbs_jobid = self.parse_jobid(self.p_obj.before)
+
+        if pbs_jobid:
+            return True
+        else:
+            return False
 
 
     def start_run(self, run, nodes):
@@ -193,15 +199,20 @@ class Pbs:
         self.p_obj.sendline(run.get_exe_cmd(nodes))
         self.p_obj.expect(self.prompt)
 
+
     def parse_nodefile(self, string):
 
         matches = re.findall('r\d+', string, flags=re.MULTILINE)
         return list(set(matches))
 
+
     def parse_jobid(self, string):
 
-        match = re.match('\d+\.r-man2', string)
-        return match.group(0)
+        m = re.search('\d+\.r-man2', string)
+        if m:
+            return m.group(0)
+        else:
+            return None
 
 
 class Scheduler:
@@ -229,10 +240,12 @@ class Scheduler:
 
 
     def print_report(self):
-        """
-        """
-        print('Scheduler ran {} jobs in {} minutes.'.format(len(self.completed_runs),
-                                                            (time.time() - start_time) / 60.))
+
+        self.completed_runs.sort(key=lambda r : r.runtime, reverse=True)
+        nruns = min(20, len(self.completed_runs))
+        for i in range(nruns):
+            r = self.completed_runs[i]
+            print('{} took {:.2} mins.'.format(r.my_dir, r.runtime / 60.0))
 
 
     def find_largest_queued_run_smaller_than(self, try_size):
@@ -422,7 +435,6 @@ def main():
     allocator = NodeAllocator(node_ids)
     scheduler = Scheduler(runs, pbs, allocator)
     scheduler.loop()
-
 
 if __name__ == '__main__':
     sys.exit(main())
