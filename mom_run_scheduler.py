@@ -105,7 +105,7 @@ class Run:
         self.alloc_key = None
 
         self.start_time = None
-        self.runtime = None
+        self.runtime = 0
 
         dir = '_'.join([compiler, build, memory_type, analyzer, exp.model.name])
         self.my_dir = os.path.join(mom_dir, dir, exp.name)
@@ -118,8 +118,9 @@ class Run:
         self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
                          ' {} &> {} ; echo {} $? >> {}) &'
 
-        # Try to reduce runtime of all jobs.
-        self.try_to_reduce_runtime()
+        # Try to reduce runtime of valgrind jobs.
+        if analyzer == 'valgrind':
+            self.try_to_reduce_runtime()
 
     def try_to_reduce_runtime(self):
 
@@ -132,11 +133,14 @@ class Run:
                 if 'months' in nml['coupler_nml']:
                     nml['coupler_nml']['months'] = 0
 
+                # Runs which were multiple days now run for 6 hours.
                 if 'days' in nml['coupler_nml']:
-                    if nml['coupler_nml']['days'] > 1:
-                        nml['coupler_nml']['days'] = 1
+                    if nml['coupler_nml']['days'] >= 1:
+                        nml['coupler_nml']['days'] = 0
+                        nml['coupler_nml']['hours'] = 6
                         changed = True
 
+                # Runs which were multiple hours now run for 1 hour.
                 if not changed and 'hours' in nml['coupler_nml']:
                     if nml['coupler_nml']['hours'] > 1:
                         nml['coupler_nml']['hours'] = 1
@@ -185,9 +189,13 @@ class Pbs:
 
     def __init__(self, ncpus):
         self.ncpus = ncpus
-        self.cmd = 'qsub -I -P e14 -q normal -l ncpus={},mem={}Gb,walltime=5:00:00'.format(ncpus, ncpus*2)
         self.pobj = None
         self.prompt = '\[{}@.+\]\$ '.format(os.environ['USER'])
+
+        queue = 'normal'
+        if ncpus <= 32:
+            queue = 'express'
+        self.cmd = 'qsub -I -P e14 -q {} -l ncpus={},mem={}Gb,walltime=5:00:00'.format(queue, ncpus, ncpus*2)
 
 
     def start_session(self, submit_qsub=True):
@@ -286,13 +294,22 @@ class Scheduler:
         self.queued_runs.sort(key=lambda r : r.nnodes, reverse=True)
 
 
-    def print_report(self):
+    def print_report(self, filename):
 
+        end_time = time.time()
         self.completed_runs.sort(key=lambda r : r.runtime, reverse=True)
-        nruns = min(20, len(self.completed_runs))
-        for i in range(nruns):
-            r = self.completed_runs[i]
-            print('{} took {:.2} mins.'.format(r.my_dir, r.runtime / 60.0))
+
+        f = open(filename, 'w')
+        for r in self.completed_runs:
+            print('Completed run {} took {:.2} mins on {} CPUs.'. \
+                  format(r.my_dir, r.runtime / 60.0, r.ncpus), file=f)
+        for r in self.in_progress_runs:
+            runtime = (end_time - r.start_time) / 60.0
+            print('Unfinished run {} took {:.2} mins on {} CPUs.'. \
+                   format(r.my_dir, runtime, r.ncpus), file=f)
+        for r in self.queued_runs:
+            print('Not started run {}'.format(r.my_dir), file=f)
+        f.close()
 
 
     def find_largest_queued_run_smaller_than(self, try_size):
@@ -357,7 +374,9 @@ class Scheduler:
                 break
             time.sleep(5)
 
-        self.print_report()
+        self.print_report('MOM6_test_runtimes.txt')
+
+        return len(self.in_progress_runs) + len(self.queued_runs)
 
 
 def create_runs(mom_dir, exps, configs):
@@ -481,7 +500,9 @@ def main():
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
     allocator = NodeAllocator(node_ids)
     scheduler = Scheduler(runs, pbs, allocator)
-    scheduler.loop()
+    ret = scheduler.loop()
+
+    return ret
 
 if __name__ == '__main__':
     sys.exit(main())
