@@ -137,7 +137,8 @@ class Run:
                     if nml['coupler_nml']['days'] > 1:
                         nml['coupler_nml']['days'] = 1
                         changed = True
-                elif 'hours' in nml['coupler_nml']:
+
+                if not changed and 'hours' in nml['coupler_nml']:
                     if nml['coupler_nml']['hours'] > 1:
                         nml['coupler_nml']['hours'] = 1
                         changed = True
