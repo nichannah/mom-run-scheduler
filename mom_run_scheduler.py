@@ -10,6 +10,8 @@ import pexpect
 from itertools import product, chain
 import multiprocessing as mp
 import re
+import fileinput
+import f90nml
 
 from model import Model
 from mom_setup import get_code, get_input_data
@@ -116,6 +118,44 @@ class Run:
         self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
                          ' {} &> {} ; echo {} $? >> {}) &'
 
+        # Reduce runtime for valgrind jobs.
+        if analyzer == 'valgrind':
+            self.try_to_reduce_runtime()
+
+    def try_to_reduce_runtime(self):
+
+        # Change runtime when it's in the input.nml
+        changed = False
+        input_nml = os.path.join(self.my_dir, 'input.nml')
+        if os.path.exists(input_nml):
+            nml = f90nml.read(input_nml)
+            if 'coupler_nml' in nml:
+                if 'months' in nml['coupler_nml']:
+                    nml['coupler_nml']['months'] = 0
+
+                if 'days' in nml['coupler_nml']:
+                    if nml['coupler_nml']['days'] > 1:
+                        nml['coupler_nml']['days'] = 1
+                        changed = True
+                elif 'hours' in nml['coupler_nml']:
+                    if nml['coupler_nml']['hours'] > 1:
+                        nml['coupler_nml']['hours'] = 1
+                        changed = True
+
+            if changed:
+                tmp_input_nml = os.path.join(self.my_dir, 'tmp_input.nml')
+                nml.write(tmp_input_nml)
+                shutil.move(tmp_input_nml, input_nml)
+                return
+
+        # Change runtime when it's in the MOM_input
+        mom_input = os.path.join(self.my_dir, 'MOM_input')
+        if os.path.exists(mom_input):
+            for l in fileinput.input([mom_input], inplace=1):
+                line = re.sub('DAYMAX *= *.+', 'DAYMAX = 1.0', l)
+                print(line, end='')
+            fileinput.close()
+
 
     def get_exe_cmd(self, node_ids):
 
@@ -173,9 +213,12 @@ class Pbs:
         Check whether the PBS session is still alive.
         """
 
-        self.p_obj.sendline('echo $PBS_JOBID')
-        self.p_obj.expect(self.prompt)
-        pbs_jobid = self.parse_jobid(self.p_obj.before)
+        try:
+            self.p_obj.sendline('echo $PBS_JOBID')
+            self.p_obj.expect(self.prompt)
+            pbs_jobid = self.parse_jobid(self.p_obj.before)
+        except pexpect.EOF:
+            pbs_jobid = None
 
         if pbs_jobid:
             return True
@@ -188,16 +231,20 @@ class Pbs:
         Start a run on a particular node
         """
 
-        run.status = 'IN_PROGRESS'
-        run.start_time = time.time()
+        try:
+            self.p_obj.sendline('cd {}'.format(run.my_dir))
+            self.p_obj.expect(self.prompt)
+            self.p_obj.sendline('mkdir -p RESTART')
+            self.p_obj.expect(self.prompt)
+            print('executing: {}'.format(run.get_exe_cmd(nodes)))
+            self.p_obj.sendline(run.get_exe_cmd(nodes))
+            self.p_obj.expect(self.prompt)
 
-        self.p_obj.sendline('cd {}'.format(run.my_dir))
-        self.p_obj.expect(self.prompt)
-        self.p_obj.sendline('mkdir -p RESTART')
-        self.p_obj.expect(self.prompt)
-        print('executing: {}'.format(run.get_exe_cmd(nodes)))
-        self.p_obj.sendline(run.get_exe_cmd(nodes))
-        self.p_obj.expect(self.prompt)
+            run.status = 'IN_PROGRESS'
+            run.start_time = time.time()
+            return True
+        except pexpect.EOF:
+            return False
 
 
     def parse_nodefile(self, string):
