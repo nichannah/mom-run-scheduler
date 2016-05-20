@@ -118,9 +118,8 @@ class Run:
         self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
                          ' {} &> {} ; echo {} $? >> {}) &'
 
-        # Reduce runtime for valgrind jobs.
-        if analyzer == 'valgrind':
-            self.try_to_reduce_runtime()
+        # Try to reduce runtime of all jobs.
+        self.try_to_reduce_runtime()
 
     def try_to_reduce_runtime(self):
 
