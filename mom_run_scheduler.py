@@ -310,6 +310,8 @@ class Scheduler:
         for r in self.queued_runs:
             print('Not started run {}'.format(r.my_dir), file=f)
         f.close()
+        with open(filename) as f:
+            print(f.read())
 
 
     def find_largest_queued_run_smaller_than(self, try_size):
@@ -408,13 +410,12 @@ def init_run_dirs(mom_dir, model_names, configs):
 
     for args in product([mom_dir], model_names, *configs):
         new_dir = get_config_run_dir(*args)
-        if not os.path.exists(new_dir):
-            if 'ocean_only' in new_dir:
-                shutil.copytree(os.path.join(mom_dir, 'ocean_only'),
-                                new_dir, symlinks=True)
-            elif 'ice_ocean_SIS2' in new_dir:
-                shutil.copytree(os.path.join(mom_dir, 'ice_ocean_SIS2'),
-                                new_dir, symlinks=True)
+        if 'ocean_only' in new_dir:
+            shutil.copytree(os.path.join(mom_dir, 'ocean_only'),
+                            new_dir, symlinks=True)
+        elif 'ice_ocean_SIS2' in new_dir:
+            shutil.copytree(os.path.join(mom_dir, 'ice_ocean_SIS2'),
+                            new_dir, symlinks=True)
 
 
 def build_shared(args):
