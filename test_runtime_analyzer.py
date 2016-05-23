@@ -17,3 +17,4 @@ class TestRuntimeAnalyzer:
                 print(output)
 
         assert 'Run complete, exit code: 0' in output
+        assert 'ERROR SUMMARY: 0 errors from 0 contexts' in output
