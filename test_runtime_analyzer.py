@@ -13,8 +13,12 @@ class TestRuntimeAnalyzer:
 
         with open(run_log, 'r') as f:
             output = f.read()
-            if not 'Run complete, exit code: 0' in output:
-                print(output)
 
-        assert 'Run complete, exit code: 0' in output
-        assert 'ERROR SUMMARY: 0 errors from 0 contexts' in output
+        run_success = 'Run complete, exit code: 0' in output
+        valgrind_success = 'ERROR SUMMARY: 0 errors from 0 contexts' in output
+
+        if not run_success or not valgrind_success:
+            print(output)
+
+        assert run_success
+        assert valgrind_success
