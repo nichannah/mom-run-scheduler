@@ -410,6 +410,8 @@ def init_run_dirs(mom_dir, model_names, configs):
 
     for args in product([mom_dir], model_names, *configs):
         new_dir = get_config_run_dir(*args)
+        if os.path.exists(new_dir):
+            shutil.rmtree(new_dir)
         if 'ocean_only' in new_dir:
             shutil.copytree(os.path.join(mom_dir, 'ocean_only'),
                             new_dir, symlinks=True)
