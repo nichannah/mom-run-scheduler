@@ -126,21 +126,27 @@ class Run:
         input_nml = os.path.join(self.my_dir, 'input.nml')
         if os.path.exists(input_nml):
             nml = f90nml.read(input_nml)
+            nml_sect = None
             if 'coupler_nml' in nml:
-                if 'months' in nml['coupler_nml']:
-                    nml['coupler_nml']['months'] = 0
+                nml_sect = nml['coupler_nml']
+            elif 'ocean_solo_nml' in nml:
+                nml_sect = nml['ocean_solo_nml']
+
+            if nml_sect:
+                if 'months' in nml_sect:
+                    nml_sect['months'] = 0
 
                 # Runs which were multiple days now run for 6 hours.
-                if 'days' in nml['coupler_nml']:
-                    if nml['coupler_nml']['days'] >= 1:
-                        nml['coupler_nml']['days'] = 0
-                        nml['coupler_nml']['hours'] = 6
+                if 'days' in nml_sect:
+                    if nml_sect['days'] >= 1:
+                        nml_sect['days'] = 0
+                        nml_sect['hours'] = 6
                         changed = True
 
                 # Runs which were multiple hours now run for 1 hour.
-                if not changed and 'hours' in nml['coupler_nml']:
-                    if nml['coupler_nml']['hours'] > 1:
-                        nml['coupler_nml']['hours'] = 1
+                if not changed and 'hours' in nml_sect:
+                    if nml_sect['hours'] > 1:
+                        nml_sect['hours'] = 1
                         changed = True
 
             if changed:
