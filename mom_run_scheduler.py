@@ -118,9 +118,6 @@ class Run:
         self.exe_cmd = '(mpiexec --host {} -np {} ' + self.analyzer_cmd + \
                          ' {} &> {} ; echo {} $? >> {}) &'
 
-        # Try to reduce runtime of valgrind jobs.
-        if analyzer == 'valgrind':
-            self.try_to_reduce_runtime()
 
     def try_to_reduce_runtime(self):
 
@@ -487,17 +484,17 @@ def main():
     memory_types = ['dynamic', 'dynamic_symmetric']
     analyzers = ['none', 'valgrind']
     model_names = ['ocean_only', 'ice_ocean_SIS2']
+    models = [Model(m, args.mom_dir) for m in model_names]
+    configs = (compilers, builds, memory_types, analyzers)
 
-    ocean_only = Model('ocean_only', args.mom_dir)
-    ice_ocean_SIS2 = Model('ice_ocean_SIS2', args.mom_dir)
-    models = [ocean_only, ice_ocean_SIS2]
+    init_run_dirs(args.mom_dir, model_names, configs)
     build_models(models, compilers, builds, memory_types)
 
     exps = discover_experiments(args.mom_dir, models)
-    configs = (compilers, builds, memory_types, analyzers)
-
     runs = create_runs(args.mom_dir, exps, configs)
-    init_run_dirs(args.mom_dir, model_names, configs)
+    for r in runs:
+        if r.analyzer == 'valgrind':
+            r.try_to_reduce_runtime()
 
     pbs = Pbs(args.ncpus)
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
