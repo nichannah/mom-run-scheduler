@@ -17,7 +17,7 @@ min_cpus = {
     'single_column/EPBL' : 1,
     'resting/z' : 8,
     'resting/layer' : 8,
-    'SCM_idealized_hurricane' : 4,
+    'SCM_idealized_hurricane' : 1,
     'CVmix_SCM_tests/mech_only/BML' : 1,
     'CVmix_SCM_tests/mech_only/KPP' : 1,
     'CVmix_SCM_tests/mech_only/EPBL' : 1,
