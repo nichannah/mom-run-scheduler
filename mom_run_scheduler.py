@@ -26,7 +26,7 @@ a single large PBS session and schedule all runs within that session. The runs
 will be executed in parallel as much as possible.
 """
 
-_valgrind_cmd = '-x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind//libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=2000000000 --max-stackframe=2000000000 --error-limit=no --track-origins=yes --gen-suppressions=all --suppressions=/short/v45/nah599/more_home/MOM6-examples/tools/tests/valgrind_suppressions.txt'
+_valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind/libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=2000000000 --max-stackframe=2000000000 --error-limit=no --track-origins=yes --gen-suppressions=all --suppressions=/short/v45/nah599/more_home/MOM6-examples/tools/tests/valgrind_suppressions.txt'
 
 class Experiment:
 
@@ -85,7 +85,8 @@ class NodeAllocator:
 
 class Run:
 
-    def __init__(self, mom_dir, exp, compiler, build, memory_type, analyzer):
+    def __init__(self, mom_dir, tmp_dir, exp, compiler, build, memory_type, analyzer):
+        self.tmp_dir = tmp_dir
         self.compiler = compiler
         self.build = build
         self.memory_type = memory_type
@@ -98,7 +99,7 @@ class Run:
         self.analyzer = analyzer
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':
-            self.analyzer_cmd = _valgrind_cmd
+            self.analyzer_cmd = _valgrind_cmd.format(tmp_dir)
 
         self.output = ''
         self.status = 'NOT_RUN'
@@ -198,7 +199,7 @@ class Pbs:
         queue = 'normal'
         if ncpus <= 32:
             queue = 'express'
-        self.cmd = 'qsub -I -P e14 -q {} -l ncpus={},mem={}Gb,walltime=5:00:00'.format(queue, ncpus, ncpus*2)
+        self.cmd = 'qsub -I -P e14 -q {} -l ncpus={},mem={}Gb,walltime=5:00:00,jobfs=100GB'.format(queue, ncpus, ncpus*2)
 
 
     def start_session(self, submit_qsub=True):
@@ -217,6 +218,24 @@ class Pbs:
         nodes = self.parse_nodefile(self.p_obj.before)
 
         return nodes
+
+
+    def get_tmpdir(self):
+        """
+        Get tmpdir within PBS session
+        """
+
+        if not self.check_session_alive():
+            return None
+
+        try:
+            self.p_obj.sendline('echo $TMPDIR')
+            self.p_obj.expect(self.prompt)
+            tmpdir = self.parse_tmpdir(self.p_obj.before)
+        except pexpect.EOF:
+            tmpdir = None
+
+        return tmpdir
 
 
     def check_session_alive(self):
@@ -267,6 +286,16 @@ class Pbs:
     def parse_jobid(self, string):
 
         m = re.search('\d+\.r-man2', string)
+        if m:
+            return m.group(0)
+        else:
+            return None
+
+
+    def parse_tmpdir(self, string):
+
+        m = re.search('^.+\d+\.r-man2', string, flags=re.MULTILINE)
+
         if m:
             return m.group(0)
         else:
@@ -384,13 +413,13 @@ class Scheduler:
         return len(self.in_progress_runs) + len(self.queued_runs)
 
 
-def create_runs(mom_dir, exps, configs):
+def create_runs(mom_dir, tmp_dir, exps, configs):
     """
     Return a list of all run objs
     """
 
     runs = []
-    for args in product([mom_dir], exps, *configs):
+    for args in product([mom_dir], [tmp_dir], exps, *configs):
         if 'valgrind' in args and 'DEBUG' not in args:
             continue
         if 'valgrind' in args and 'intel' not in args:
@@ -497,14 +526,18 @@ def main():
     build_models(models, compilers, builds, memory_types)
 
     exps = discover_experiments(args.mom_dir, models)
-    runs = create_runs(args.mom_dir, exps, configs)
-    for r in runs:
-        if r.analyzer == 'valgrind':
-            r.try_to_reduce_runtime()
 
     pbs = Pbs(args.ncpus)
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
     allocator = NodeAllocator(node_ids)
+
+    # Runs need to be created once we're in the PBS session because they need
+    # to know the TMPDIR.
+    runs = create_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
+    for r in runs:
+        if r.analyzer == 'valgrind':
+            r.try_to_reduce_runtime()
+
     scheduler = Scheduler(runs, pbs, allocator)
     ret = scheduler.loop()
 
