@@ -11,6 +11,21 @@ def get_code(mom_dir):
     sh.git('clone', 'https://github.com/nicjhan/mkmf.git',
                 os.path.join(mom_dir, 'mkmf'))
 
+
+def checkout_latest_code(mom_dir):
+
+    dirs = []
+    for m in ['MOM6', 'SIS2', 'icebergs']:
+        dirs.append(os.path.join(mom_dir, 'src', m))
+
+    orig_dir = os.getcwd()
+
+    for d in dirs:
+        os.chdir(d)
+        sh.git('checkout', 'dev/master')
+    os.chdir(orig_dir)
+
+
 def get_input_data(dest_dir):
     """
     Set up input data.

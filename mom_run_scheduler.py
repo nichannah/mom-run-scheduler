@@ -14,7 +14,7 @@ import fileinput
 import f90nml
 
 from model import Model
-from mom_setup import get_code, get_input_data
+from mom_setup import get_code, get_input_data, checkout_latest_code
 import exp_resources
 
 """
@@ -504,12 +504,16 @@ def main():
         help="Path to MOM6-examples, will be downloaded if it doesn't exist")
     parser.add_argument('--ncpus', default=16, type=int)
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
+    parser.add_argument('--use_latest', action='store_true', default=False,
+                        help='Checkout the latest MOM6,SIS2,icebergs')
     args = parser.parse_args()
 
     args.mom_dir = os.path.realpath(args.mom_dir)
 
     if not os.path.exists(args.mom_dir):
         get_code(args.mom_dir)
+    if args.use_latest:
+        checkout_latest_code(args.mom_dir)
 
     if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
         get_input_data(os.path.join(args.mom_dir, '.datasets'))
