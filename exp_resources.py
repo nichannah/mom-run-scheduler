@@ -1,5 +1,5 @@
 
-# The minimum number of cpus needed to run a particular model
+# The minimum number of cpus needed to run a particular experiment
 
 min_cpus = {
     'global_ALE/z' : 256,

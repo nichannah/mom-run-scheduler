@@ -15,6 +15,7 @@ import f90nml
 
 from model import Model
 from mom_setup import get_code, get_input_data, checkout_latest_code
+from mom5_exps import mom5_exps
 import exp_resources
 
 """
@@ -30,11 +31,12 @@ _valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local
 
 class Experiment:
 
-    def __init__(self, path, model):
+    def __init__(self, name, model, path, ncpus):
         self.orig_path = path
         self.model = model
-        self.name = path.split(model.name)[-1].strip('/')
-        self.min_cpus = exp_resources.min_cpus.get(self.name, None)
+        self.name = name
+        self.min_cpus = ncpus
+
 
 
 class NodeAllocator:
@@ -413,6 +415,9 @@ class Scheduler:
         return len(self.in_progress_runs) + len(self.queued_runs)
 
 
+def create_mom5_runs(mom_dir, tmp_dir, exps, configs):
+    pass
+
 def create_runs(mom_dir, tmp_dir, exps, configs):
     """
     Return a list of all run objs
@@ -452,6 +457,9 @@ def init_run_dirs(mom_dir, model_names, configs):
                             new_dir, symlinks=True)
 
 
+def build_mom5_models(models, compilers, builds, memory_types):
+    pass
+
 def build_shared(args):
     model, compiler, build = args
     model.build_shared(compiler, build)
@@ -467,6 +475,17 @@ def build_models(models, compilers, builds, memory_types):
     p.map(build_model, product(models, compilers, builds, memory_types))
     p.close()
     p.join()
+
+
+def discover_mom5_experiments(mom_dir):
+
+    exps = []
+    for k, v in mom5_exps.iteritems()
+        path = os.path.join(mom_dir, 'work', k)
+        e = Experiment(k, v['model'], v['ncpus'], path)
+        exps.append(e)
+
+    return exps        
 
 
 def discover_experiments(mom_dir, models):
@@ -492,7 +511,11 @@ def discover_experiments(mom_dir, models):
                         break
 
                 if model:
-                    e = Experiment(fix_exp_path(path, mom_dir), model)
+
+                    path = fix_exp_path(path, mom_dir)
+                    name = path.split(model.name)[-1].strip('/')
+                    ncpus = exp_resources.min_cpus.get(name, None)
+                    e = Experiment(name, model, path, ncpus)
                     exps.append(e)
     return exps
 
@@ -501,35 +524,51 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('mom_dir',
-        help="Path to MOM6-examples, will be downloaded if it doesn't exist")
+        help="Path to MOM5/MOM6-examples, will be downloaded if it doesn't exist")
     parser.add_argument('--ncpus', default=16, type=int)
+    parser.add_argument('--model', default='MOM6',
+                        help='Model to use, valid choices are MOM5 and MOM6')
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
     parser.add_argument('--use_latest', action='store_true', default=False,
-                        help='Checkout the latest MOM6,SIS2,icebergs')
+                        help='Checkout the latest MOM5/MOM6,SIS2,icebergs')
     args = parser.parse_args()
 
+    args.model = args.model.upper()
     args.mom_dir = os.path.realpath(args.mom_dir)
 
     if not os.path.exists(args.mom_dir):
-        get_code(args.mom_dir)
+        get_code(args.mom_dir, args.model)
     if args.use_latest:
-        checkout_latest_code(args.mom_dir)
+        checkout_latest_code(args.mom_dir, args.model)
 
-    if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
-        get_input_data(os.path.join(args.mom_dir, '.datasets'))
+    get_input_data(args.mom_dir, args.model)
 
-    compilers = ['intel', 'gnu']
-    builds = ['DEBUG', 'REPRO']
-    memory_types = ['dynamic', 'dynamic_symmetric']
-    analyzers = ['none', 'valgrind']
-    model_names = ['ocean_only', 'ice_ocean_SIS2']
-    models = [Model(m, args.mom_dir) for m in model_names]
-    configs = (compilers, builds, memory_types, analyzers)
+    if args.model == 'MOM6':
+        compilers = ['intel', 'gnu']
+        builds = ['DEBUG', 'REPRO']
+        memory_types = ['dynamic', 'dynamic_symmetric']
+        analyzers = ['none', 'valgrind']
+        model_names = ['ocean_only', 'ice_ocean_SIS2']
+        models = [Model(m, args.mom_dir) for m in model_names]
+        configs = (compilers, builds, memory_types, analyzers)
 
-    init_run_dirs(args.mom_dir, model_names, configs)
-    build_models(models, compilers, builds, memory_types)
+        init_run_dirs(args.mom_dir, model_names, configs)
+        build_models(models, compilers, builds, memory_types)
 
-    exps = discover_experiments(args.mom_dir, models)
+        exps = discover_experiments(args.mom_dir, models)
+
+    else:
+        assert(args.model == 'MOM5')
+
+        compilers = ['intel']
+        builds = ['DEBUG']
+        model_names = []
+        for k, v in mom5_exps:
+            if v['model'] not in model_names:
+                model_names.append(v['model'])
+        models = [MOM5Model(m, args.mom_dir) for m in model_names]
+        build_mom5_models(models, compilers, builds)
+        exps = discover_mom5_experiments(args.mom_dir)
 
     pbs = Pbs(args.ncpus)
     node_ids = pbs.start_session(submit_qsub=(not args.already_in_pbs))
@@ -537,10 +576,14 @@ def main():
 
     # Runs need to be created once we're in the PBS session because they need
     # to know the TMPDIR.
-    runs = create_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
-    for r in runs:
-        if r.analyzer == 'valgrind':
-            r.try_to_reduce_runtime()
+    if args.model == 'MOM6':
+        runs = create_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
+        for r in runs:
+            if r.analyzer == 'valgrind':
+                r.try_to_reduce_runtime()
+    else:
+        assert(args.model == 'MOM5')
+        runs = create_mom5_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
 
     scheduler = Scheduler(runs, pbs, allocator)
     ret = scheduler.loop()
