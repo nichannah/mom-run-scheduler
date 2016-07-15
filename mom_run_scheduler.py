@@ -506,6 +506,8 @@ def main():
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
     parser.add_argument('--use_latest', action='store_true', default=False,
                         help='Checkout the latest MOM6,SIS2,icebergs')
+    parser.add_argument('--fast', action='store_true', default=False,
+                        help='Run a fast subset of tests.')
     args = parser.parse_args()
 
     args.mom_dir = os.path.realpath(args.mom_dir)
@@ -519,9 +521,15 @@ def main():
         get_input_data(os.path.join(args.mom_dir, '.datasets'))
 
     compilers = ['intel', 'gnu']
-    builds = ['DEBUG', 'REPRO']
-    memory_types = ['dynamic', 'dynamic_symmetric']
-    analyzers = ['none', 'valgrind']
+    if args.fast:
+      builds = ['REPRO']
+      memory_types = ['dynamic_symmetric']
+      analyzers = ['none']
+    else:
+      builds = ['DEBUG', 'REPRO']
+      memory_types = ['dynamic', 'dynamic_symmetric']
+      analyzers = ['none', 'valgrind']
+
     model_names = ['ocean_only', 'ice_ocean_SIS2']
     models = [Model(m, args.mom_dir) for m in model_names]
     configs = (compilers, builds, memory_types, analyzers)
