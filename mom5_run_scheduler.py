@@ -13,12 +13,12 @@ import re
 import fileinput
 import f90nml
 
-from model import Model
+from mom5_model import Model
 from mom_setup import get_code, get_input_data, checkout_latest_code
 import exp_resources
 
 """
-Do as many MOM6 runs as quickly as possible. Ideally we need ~100 runs in less
+Do as many MOM runs as quickly as possible. Ideally we need ~100 runs in less
 than an hour.
 
 Given a specification of a large number of MOM(6) runs this program will start
@@ -469,34 +469,6 @@ def build_models(models, compilers, builds, memory_types):
     p.join()
 
 
-def discover_experiments(mom_dir, models):
-    """
-    Return a list of all experiment paths relative to the top of the mom dir.
-    """
-
-    def fix_exp_path(path, mom_dir):
-        path = os.path.normpath(path)
-        path = path.replace(mom_dir, '')
-        # Remove possible '/' from front and back.
-        return path.strip('/')
-
-    exps = []
-    paths = [os.path.join(mom_dir, m.name) for m in models]
-    for path, dirs, filenames in chain.from_iterable(os.walk(p) for p in paths):
-        for fname in filenames:
-            if fname == 'input.nml' and 'common' not in path:
-                model = None
-                for m in models:
-                    if m.name in path:
-                        model = m
-                        break
-
-                if model:
-                    e = Experiment(fix_exp_path(path, mom_dir), model)
-                    exps.append(e)
-    return exps
-
-
 def main():
 
     parser = argparse.ArgumentParser()
@@ -505,7 +477,7 @@ def main():
     parser.add_argument('--ncpus', default=16, type=int)
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
     parser.add_argument('--use_latest', action='store_true', default=False,
-                        help='Checkout the latest MOM6,SIS2,icebergs')
+                        help='Checkout the latest MOM5')
     parser.add_argument('--fast', action='store_true', default=False,
                         help='Run a fast subset of tests.')
     args = parser.parse_args()
@@ -523,16 +495,14 @@ def main():
     compilers = ['intel', 'gnu']
     if args.fast:
       builds = ['REPRO']
-      memory_types = ['dynamic_symmetric']
       analyzers = ['none']
     else:
       builds = ['DEBUG', 'REPRO']
-      memory_types = ['dynamic', 'dynamic_symmetric']
       analyzers = ['none', 'valgrind']
 
     model_names = ['ocean_only', 'ice_ocean_SIS2']
     models = [Model(m, args.mom_dir) for m in model_names]
-    configs = (compilers, builds, memory_types, analyzers)
+    configs = (compilers, builds, analyzers)
 
     init_run_dirs(args.mom_dir, model_names, configs)
     build_models(models, compilers, builds, memory_types)
