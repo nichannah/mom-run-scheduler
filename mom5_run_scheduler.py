@@ -9,8 +9,8 @@ import pexpect
 from itertools import product
 
 from mom5_workspace import Workspace
-from mom5_model import models
-from mom5_exps import exps
+from mom5_model import model_names, Model
+from mom5_exp import exps
 from mom5_run import Run
 from build import Build
 from scheduler import Scheduler
@@ -29,7 +29,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('mom_dir',
-        help="Path to MOM6-examples, will be downloaded if it doesn't exist")
+        help="Path to MOM5 repo, will be downloaded if it doesn't exist")
     parser.add_argument('--ncpus', default=16, type=int)
     parser.add_argument('--already_in_pbs', action='store_true', default=False)
     parser.add_argument('--use_latest', action='store_true', default=False,
@@ -38,20 +38,22 @@ def main():
                         help='Run a fast subset of tests.')
     args = parser.parse_args()
 
+    ret = 0
     args.mom_dir = os.path.realpath(args.mom_dir)
     workspace = Workspace(args.mom_dir)
 
     workspace.download_code()
-    workspace.download_input_data()
 
-    #init_run_dirs(args.mom_dir, model_names, configs)
+    models = [Model(args.mom_dir, n) for n in model_names]
     builds = [Build(*bargs) for bargs in \
-                product([workspace.dir], models, ['DEBUG'], ['intel']]
+                product([workspace.dir], models, ['DEBUG'], ['intel'])]
     for b in builds:
-        b.build()
+        ret = b.build()
+        assert(ret == 0)
 
     for e in exps:
-        workspace.download_input_data(e.name)
+        pass
+        #workspace.download_input_data(e.name)
 
     # Runs need to be created once we're in the PBS session because they need
     # to know the TMPDIR.
@@ -59,7 +61,7 @@ def main():
     pbs.start_session(submit_qsub=(not args.already_in_pbs))
 
     runs = [Run(*rargs) for rargs in \
-            product(exps, builds, analyzers, [pbs.get_tmpdir()]])
+            product(exps, builds, analyzers, [pbs.get_tmpdir()])]
 
     scheduler = Scheduler(runs, pbs, allocator)
     ret = scheduler.loop()
