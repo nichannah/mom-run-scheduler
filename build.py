@@ -7,6 +7,7 @@ class Build:
         self.model = model
         self.build_type = build_type
         self.compiler = compiler
+        self.name = build_type + '_' + compiler
 
         self.build_dir = os.path.join(ws_dir, 'exec', 'nci', model.name)
         self.exe = os.path.join(self.build_dir, 'fms_' + model.name + '.x')

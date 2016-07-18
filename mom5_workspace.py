@@ -4,8 +4,29 @@ import os
 
 class Workspace:
 
-    def __init__(self, dir):
-        self.dir = dir
+    def __init__(self, mom_dir):
+        self.mom_dir = mom_dir
+        self.work_dir = os.path.join(self.mom_dir, 'work')
+        self.archive_dir = os.path.join(self.mom_dir, 'data', 'archives')
+        if not os.path.exists(self.work_dir):
+            os.mkdir(work_dir)
+
+        if not os.path.exists(self.archive_dir):
+            os.mkdir(self.archive_dir)
+
+    def setup_run_dir(self, exp_name, run_dir):
+
+        filename = '{}.input.tar.gz'.format(exp_name)
+        filename_full = os.path.join(self.archive_dir, filename)
+
+        if not os.path.exists(os.path.join(self.work_dir, filename)):
+            shutil.copy(filename_full, self.work_dir)
+
+        ret = 0
+        if not os.path.exists(run_dir)):
+            cmd = '/bin/tar -C {} -xvf {}'.format(work_dir, filename_full)
+            ret += sp.call(shlex.split(cmd))
+            shutil.move(os.path.join(self.work_dir, exp_name), run_dir)
 
     def download_code(self):
         """
@@ -23,7 +44,6 @@ class Workspace:
 
         data_dir = os.path.join(self.dir, 'data')
         archive_dir = os.path.join(data_dir, 'archives')
-        work_dir = os.path.join(self.dir, 'work', exp_name)
 
         filename = '{}.input.tar.gz'.format(exp_name)
         input = os.path.join(archive_dir, filename)
@@ -36,17 +56,6 @@ class Workspace:
         if ret != 0:
             return ret
         assert(os.path.exists(input))
-
-        # Unzip into work directory.
-        if not os.path.exists(work_dir):
-            os.mkdir(work_dir)
-
-        if not os.path.exists(os.path.join(work_dir, filename)):
-            shutil.copy(input, work_dir)
-
-        if not os.path.exists(os.path.join(work_dir, exp_name)):
-            cmd = '/bin/tar -C {} -xvf {}'.format(work_dir, input)
-            ret += sp.call(shlex.split(cmd))
 
         return ret
 

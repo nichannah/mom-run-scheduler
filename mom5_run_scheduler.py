@@ -44,6 +44,7 @@ def main():
 
     workspace.download_code()
 
+    analyzers = ['none', 'valgrind']
     models = [Model(args.mom_dir, n) for n in model_names]
     builds = [Build(*bargs) for bargs in \
                 product([workspace.dir], models, ['DEBUG'], ['intel'])]
@@ -52,8 +53,7 @@ def main():
         assert(ret == 0)
 
     for e in exps:
-        pass
-        #workspace.download_input_data(e.name)
+        workspace.download_input_data(e.name)
 
     # Runs need to be created once we're in the PBS session because they need
     # to know the TMPDIR.
@@ -61,7 +61,10 @@ def main():
     pbs.start_session(submit_qsub=(not args.already_in_pbs))
 
     runs = [Run(*rargs) for rargs in \
-            product(exps, builds, analyzers, [pbs.get_tmpdir()])]
+            product(exps, builds, analyzers, \
+                    [workspace.work_dir], [pbs.get_tmpdir()])]
+    for r in runs:
+        workspace.setup_run_dir(r.exp.name, r.run_dir)
 
     scheduler = Scheduler(runs, pbs, allocator)
     ret = scheduler.loop()

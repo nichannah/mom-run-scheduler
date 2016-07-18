@@ -7,12 +7,10 @@ _valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local
 
 class Run:
 
-    def __init__(self, exp, build, analyzer, mom_dir, tmp_dir):
+    def __init__(self, exp, build, analyzer, work_dir, tmp_dir):
         self.exp = exp
         self.build = build
         self.analyzer = analyzer
-        self.mom_dir = mom_dir
-        self.tmp_dir = tmp_dir
 
         self.nnodes = int(math.ceil(exp.ncpus / 16.))
 
@@ -27,8 +25,9 @@ class Run:
         self.start_time = None
         self.runtime = 0
 
-        self.my_dir = os.path.join(mom_dir, 'work', exp.name)
-        self.output_file = os.path.join(self.my_dir, 'mom.out')
+        self.run_dir = os.path.join(work_dir, exp.name + '_' + \
+                                    build.name + '_' + analyzer)
+        self.output_file = os.path.join(self.run_dir, 'mom.out')
         if os.path.exists(self.output_file):
             os.remove(self.output_file)
 
@@ -43,7 +42,6 @@ class Run:
                                   'Run complete, exit code: ',
                                   self.output_file)
         return cmd
-
 
     def update_status(self):
         if os.path.exists(self.output_file):
