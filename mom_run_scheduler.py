@@ -520,12 +520,13 @@ def main():
     if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
         get_input_data(os.path.join(args.mom_dir, '.datasets'))
 
-    compilers = ['intel', 'gnu']
     if args.fast:
+      compilers = ['intel']
       builds = ['REPRO']
       memory_types = ['dynamic_symmetric']
       analyzers = ['none']
     else:
+      compilers = ['intel', 'gnu']
       builds = ['DEBUG', 'REPRO']
       memory_types = ['dynamic', 'dynamic_symmetric']
       analyzers = ['none', 'valgrind']
