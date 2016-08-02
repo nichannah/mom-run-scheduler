@@ -26,7 +26,7 @@ class Model:
 
         debug = ''
         if build_type.lower() == 'debug':
-            debug = 'debug'
+            debug = '--debug'
 
         build_cmd = _build_cmd.format(mom_dir=self.mom_dir,
                                       model_name=self.name, debug=debug)

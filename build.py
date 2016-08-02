@@ -12,4 +12,4 @@ class Build:
         self.exe = os.path.join(self.build_dir, 'fms_' + model.name + '.x')
 
     def build(self):
-        self.model.build(self.build_type, self.compiler)
+        return self.model.build(self.build_type, self.compiler)
