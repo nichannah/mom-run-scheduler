@@ -13,6 +13,7 @@ class Run:
         self.analyzer = analyzer
 
         self.nnodes = int(math.ceil(exp.ncpus / 16.))
+        self.ncpus = self.nnodes * 16
 
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':
@@ -25,8 +26,8 @@ class Run:
         self.start_time = None
         self.runtime = 0
 
-        self.run_dir = os.path.join(work_dir, exp.name + '_' + \
-                                    build.name + '_' + analyzer)
+        self.name =  exp.name + '_' + build.name + '_' + analyzer
+        self.run_dir = os.path.join(work_dir, self.name)
         self.output_file = os.path.join(self.run_dir, 'mom.out')
         if os.path.exists(self.output_file):
             os.remove(self.output_file)

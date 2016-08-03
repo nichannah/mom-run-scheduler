@@ -13,4 +13,8 @@ class Build:
         self.exe = os.path.join(self.build_dir, 'fms_' + model.name + '.x')
 
     def build(self):
-        return self.model.build(self.build_type, self.compiler)
+        if not os.path.exists(self.exe):
+            return self.model.build(self.build_type, self.compiler)
+        else:
+            return 0
+

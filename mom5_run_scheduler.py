@@ -39,21 +39,18 @@ def main():
     args = parser.parse_args()
 
     ret = 0
-    args.mom_dir = os.path.realpath(args.mom_dir)
-    workspace = Workspace(args.mom_dir)
-
+    workspace = Workspace(os.path.realpath(args.mom_dir))
     workspace.download_code()
+    for e in exps:
+        workspace.download_input_data(e.name)
 
     analyzers = ['none', 'valgrind']
-    models = [Model(args.mom_dir, n) for n in model_names]
+    models = [Model(workspace.mom_dir, n) for n in model_names]
     builds = [Build(*bargs) for bargs in \
-                product([workspace.dir], models, ['DEBUG'], ['intel'])]
+                product([workspace.mom_dir], models, ['DEBUG'], ['intel'])]
     for b in builds:
         ret = b.build()
         assert(ret == 0)
-
-    for e in exps:
-        workspace.download_input_data(e.name)
 
     # Runs need to be created once we're in the PBS session because they need
     # to know the TMPDIR.
@@ -66,7 +63,7 @@ def main():
     for r in runs:
         workspace.setup_run_dir(r.exp.name, r.run_dir)
 
-    scheduler = Scheduler(runs, pbs, allocator)
+    scheduler = Scheduler(runs, pbs)
     ret = scheduler.loop()
 
     return ret

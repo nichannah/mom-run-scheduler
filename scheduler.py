@@ -1,5 +1,7 @@
 from __future__ import print_function
 
+import time
+
 class NodeAllocator:
 
     def __init__(self, node_ids):
@@ -59,7 +61,7 @@ class Scheduler:
         # Remove any runs which can't be run.
         self.queued_runs = []
         for r in runs:
-            if r.nnodes > allocator.max_available_nodes():
+            if r.nnodes > self.allocator.max_available_nodes():
                 r.set_wont_run('Insuffient nodes')
                 self.completed_runs.append(r)
             else:
@@ -79,13 +81,13 @@ class Scheduler:
         f = open(filename, 'w')
         for r in self.completed_runs:
             print('Completed run {} took {:.2} mins on {} CPUs.'. \
-                  format(r.my_dir, r.runtime / 60.0, r.ncpus), file=f)
+                  format(r.name, r.runtime / 60.0, r.ncpus), file=f)
         for r in self.in_progress_runs:
             runtime = (end_time - r.start_time) / 60.0
             print('Unfinished run {} took {:.2} mins on {} CPUs.'. \
-                   format(r.my_dir, runtime, r.ncpus), file=f)
+                   format(r.name, runtime, r.ncpus), file=f)
         for r in self.queued_runs:
-            print('Not started run {}'.format(r.my_dir), file=f)
+            print('Not started run {}'.format(r.name), file=f)
         f.close()
         with open(filename) as f:
             print(f.read())

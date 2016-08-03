@@ -1,6 +1,9 @@
 
 import sh
 import os
+import subprocess as sp
+import shlex
+import shutil
 
 class Workspace:
 
@@ -9,7 +12,7 @@ class Workspace:
         self.work_dir = os.path.join(self.mom_dir, 'work')
         self.archive_dir = os.path.join(self.mom_dir, 'data', 'archives')
         if not os.path.exists(self.work_dir):
-            os.mkdir(work_dir)
+            os.mkdir(self.work_dir)
 
         if not os.path.exists(self.archive_dir):
             os.mkdir(self.archive_dir)
@@ -23,8 +26,8 @@ class Workspace:
             shutil.copy(filename_full, self.work_dir)
 
         ret = 0
-        if not os.path.exists(run_dir)):
-            cmd = '/bin/tar -C {} -xvf {}'.format(work_dir, filename_full)
+        if not os.path.exists(run_dir):
+            cmd = '/bin/tar -C {} -xvf {}'.format(self.work_dir, filename_full)
             ret += sp.call(shlex.split(cmd))
             shutil.move(os.path.join(self.work_dir, exp_name), run_dir)
 
@@ -33,24 +36,21 @@ class Workspace:
         Download model code and build configs.
         """
 
-        if not os.path.exists(self.dir):
+        if not os.path.exists(self.mom_dir):
             sh.git('clone', 
-                    'https://github.com/BreakawayLabs/mom.git', self.dir)
+                    'https://github.com/BreakawayLabs/mom.git', self.mom_dir)
 
     def download_input_data(self, exp_name):
         """
         Download the experiment input data.
         """
 
-        data_dir = os.path.join(self.dir, 'data')
-        archive_dir = os.path.join(data_dir, 'archives')
-
         filename = '{}.input.tar.gz'.format(exp_name)
-        input = os.path.join(archive_dir, filename)
+        input = os.path.join(self.archive_dir, filename)
 
         ret = 0
         if not os.path.exists(input):
-            cmd = '{} {}'.format(os.path.join(self.dir, 'data', 'get_exp_data.py'),
+            cmd = '{} {}'.format(os.path.join(self.mom_dir, 'data', 'get_exp_data.py'),
                                  filename)
             ret = sp.call(shlex.split(cmd))
         if ret != 0:
