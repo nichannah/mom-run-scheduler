@@ -2,6 +2,7 @@ import os, sys, shutil
 import math
 import re
 import fileinput
+import time
 
 _valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind/libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=200000000 --max-stackframe=200000000 --error-limit=no --track-origins=yes --freelist-vol=10000000 --gen-suppressions=all --suppressions=/short/v45/nah599/more_home/valgrind_suppressions.txt'
 
@@ -13,7 +14,7 @@ class Run:
         self.analyzer = analyzer
 
         self.nnodes = int(math.ceil(exp.ncpus / 16.))
-        self.ncpus = self.nnodes * 16
+        self.ncpus = exp.ncpus
 
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':

@@ -1,6 +1,7 @@
 import os
 import re
 import pexpect
+import time
 
 class Pbs:
 
@@ -76,7 +77,7 @@ class Pbs:
         """
 
         try:
-            self.p_obj.sendline('cd {}'.format(run.my_dir))
+            self.p_obj.sendline('cd {}'.format(run.run_dir))
             self.p_obj.expect(self.prompt)
             self.p_obj.sendline('mkdir -p RESTART')
             self.p_obj.expect(self.prompt)

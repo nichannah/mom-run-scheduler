@@ -31,6 +31,19 @@ class Workspace:
             ret += sp.call(shlex.split(cmd))
             shutil.move(os.path.join(self.work_dir, exp_name), run_dir)
 
+        for f in ['diag_table', 'data_table', 'field_table', 'input.nml']:
+            src = os.path.join(run_dir, 'INPUT', f)
+            dest =  os.path.join(run_dir, f)
+            shutil.copy(src, dest)
+
+        prev_dir = os.getcwd()
+        os.chdir(run_dir)
+        ret += sp.call(['/bin/csh',
+                        os.path.join(self.mom_dir, 'exp', 'preprocessing.csh')])
+        os.chdir(prev_dir)
+
+        return ret
+
     def download_code(self):
         """
         Download model code and build configs.

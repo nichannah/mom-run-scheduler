@@ -44,7 +44,8 @@ def main():
     for e in exps:
         workspace.download_input_data(e.name)
 
-    analyzers = ['none', 'valgrind']
+    #analyzers = ['none', 'valgrind']
+    analyzers = ['none']
     models = [Model(workspace.mom_dir, n) for n in model_names]
     builds = [Build(*bargs) for bargs in \
                 product([workspace.mom_dir], models, ['DEBUG'], ['intel'])]
@@ -57,9 +58,12 @@ def main():
     pbs = Pbs(args.ncpus)
     pbs.start_session(submit_qsub=(not args.already_in_pbs))
 
-    runs = [Run(*rargs) for rargs in \
-            product(exps, builds, analyzers, \
-                    [workspace.work_dir], [pbs.get_tmpdir()])]
+    runs = []
+    for b in builds:
+        for e in exps:
+            if b.model.name == e.model_name:
+                runs.extend([Run(*rargs) for rargs in product([e], [b], analyzers, \
+                            [workspace.work_dir], [pbs.get_tmpdir()])])
     for r in runs:
         workspace.setup_run_dir(r.exp.name, r.run_dir)
 
