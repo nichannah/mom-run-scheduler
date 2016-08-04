@@ -44,8 +44,7 @@ def main():
     for e in exps:
         workspace.download_input_data(e.name)
 
-    #analyzers = ['none', 'valgrind']
-    analyzers = ['none']
+    analyzers = ['none', 'valgrind']
     models = [Model(workspace.mom_dir, n) for n in model_names]
     builds = [Build(*bargs) for bargs in \
                 product([workspace.mom_dir], models, ['DEBUG'], ['intel'])]
