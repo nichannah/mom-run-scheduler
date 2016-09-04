@@ -11,7 +11,7 @@ min_cpus = {
     'benchmark' : 128,
     'MESO_025_63L' : 288,
     'MESO_025_23L' : 288,
-    'OM4_025' : 480,
+    'OM4_025' : 910,
     'single_column/BML' : 1,
     'single_column/KPP' : 1,
     'single_column/EPBL' : 1,
@@ -34,4 +34,13 @@ min_cpus = {
     'SIS2' : 128,
     'SIS2_bergs_cgrid' : 128,
     'SIS2_cgrid' : 128,
+}
+
+cpu_layout = {
+    'OM4_025' : \
+    """
+    LAYOUT = 32,36
+    IO_LAYOUT = 2,2
+    MASKTABLE = "mask_table.242.32x36"
+    """
 }

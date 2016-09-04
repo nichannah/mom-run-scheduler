@@ -35,6 +35,7 @@ class Experiment:
         self.model = model
         self.name = path.split(model.name)[-1].strip('/')
         self.min_cpus = exp_resources.min_cpus.get(self.name, None)
+        self.cpu_layout = exp_resources.cpu_layout.get(self.name, None)
 
 
 class NodeAllocator:
@@ -163,6 +164,16 @@ class Run:
                 line = re.sub('DAYMAX *= *.+', 'DAYMAX = 1.0', l)
                 print(line, end='')
             fileinput.close()
+
+    def set_new_cpu_layout(self):
+
+        if self.exp.cpu_layout is None:
+            return
+
+        mom_layout = os.path.join(self.my_dir, 'MOM_layout')
+        if os.path.exists(mom_layout):
+            with open(mom_layout, 'w') as f:
+                f.write(self.exp.cpu_layout)
 
 
     def get_exe_cmd(self, node_ids):
@@ -548,6 +559,7 @@ def main():
     # to know the TMPDIR.
     runs = create_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
     for r in runs:
+        r.set_new_cpu_layout()
         if r.analyzer == 'valgrind':
             r.try_to_reduce_runtime()
 
