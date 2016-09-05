@@ -170,11 +170,11 @@ class Run:
         if self.exp.cpu_layout is None:
             return
 
-        mom_layout = os.path.join(self.my_dir, 'MOM_layout')
-        if os.path.exists(mom_layout):
-            with open(mom_layout, 'w') as f:
-                f.write(self.exp.cpu_layout)
-
+        for fname in ['MOM_layout', 'SIS_layout']:
+            layout = os.path.join(self.my_dir, fname)
+            if os.path.exists(layout):
+                with open(layout, 'w') as f:
+                    f.write(self.exp.cpu_layout)
 
     def get_exe_cmd(self, node_ids):
 
