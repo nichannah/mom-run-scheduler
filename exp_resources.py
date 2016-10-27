@@ -39,9 +39,9 @@ min_cpus = {
 
 cpu_layout = {
     'OM4_025' : \
-    """
-    LAYOUT = 32,36
-    IO_LAYOUT = 2,2
-    MASKTABLE = "mask_table.242.32x36"
-    """
+"""
+LAYOUT = 32,36
+IO_LAYOUT = 2,2
+MASKTABLE = "mask_table.242.32x36"
+"""
 }
