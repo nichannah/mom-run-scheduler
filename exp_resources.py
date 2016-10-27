@@ -12,6 +12,7 @@ min_cpus = {
     'MESO_025_63L' : 288,
     'MESO_025_23L' : 288,
     'OM4_025' : 910,
+    'OM4_05' : 128,
     'single_column/BML' : 1,
     'single_column/KPP' : 1,
     'single_column/EPBL' : 1,
