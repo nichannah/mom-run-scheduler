@@ -12,6 +12,24 @@ def get_code(mom_dir):
                 os.path.join(mom_dir, 'mkmf'))
 
 
+def get_code_hashes(mom_dir):
+
+    latest_code_hashes = []
+
+    dirs = [mom_dir]
+    for m in ['MOM6', 'SIS2', 'icebergs']:
+        dirs.append(os.path.join(mom_dir, 'src', m))
+
+    orig_dir = os.getcwd()
+    for d in dirs:
+        os.chdir(d)
+        rev = sh.git('rev-parse', 'HEAD').strip()
+        latest_code_hashes.append((d, rev))
+    os.chdir(orig_dir)
+
+    return latest_code_hashes
+
+
 def checkout_latest_code(mom_dir):
 
     dirs = []

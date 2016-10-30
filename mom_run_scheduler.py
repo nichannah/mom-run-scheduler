@@ -14,7 +14,7 @@ import fileinput
 import f90nml
 
 from model import Model
-from mom_setup import get_code, get_input_data, checkout_latest_code
+from mom_setup import get_code, get_input_data, checkout_latest_code, get_code_hashes
 import exp_resources
 
 """
@@ -97,6 +97,8 @@ class Run:
             self.ncpus = exp.min_cpus
         self.nnodes = int(math.ceil(self.ncpus / 16.))
 
+        self.info_header = ''
+
         self.analyzer = analyzer
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':
@@ -175,6 +177,25 @@ class Run:
             if os.path.exists(layout):
                 with open(layout, 'w') as f:
                     f.write(self.exp.cpu_layout)
+
+    def append_to_info_header(self, info):
+        """
+        Append some info to go in the run header.
+
+        This is printed to the stdout before the run starts.
+        """
+
+        self.info_header += info
+
+    def write_info_header(self):
+        mode = 'r+'
+        if not os.path.exists(self.output_file):
+            mode = 'w'
+
+        with open(self.output_file, mode) as f:
+            f.write("=== Run info header ===\n")
+            f.write(self.info_header)
+            f.write("=== End run info header ===\n")
 
     def get_exe_cmd(self, node_ids):
 
@@ -278,6 +299,7 @@ class Pbs:
             self.p_obj.sendline('mkdir -p RESTART')
             self.p_obj.expect(self.prompt)
             print('executing: {}'.format(run.get_exe_cmd(nodes)))
+            run.write_info_header()
             self.p_obj.sendline(run.get_exe_cmd(nodes))
             self.p_obj.expect(self.prompt)
 
@@ -527,6 +549,10 @@ def main():
         get_code(args.mom_dir)
     if args.use_latest:
         checkout_latest_code(args.mom_dir)
+    code_hashes = get_code_hashes(args.mom_dir)
+    code_hashes_str = 'Code hashes:\n'
+    for d, h in code_hashes:
+        code_hashes_str += (d + ': ' + h + '\n')
 
     if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
         get_input_data(os.path.join(args.mom_dir, '.datasets'))
@@ -560,6 +586,7 @@ def main():
     runs = create_runs(args.mom_dir, pbs.get_tmpdir(), exps, configs)
     for r in runs:
         r.set_new_cpu_layout()
+        r.append_to_info_header(code_hashes_str)
         if r.analyzer == 'valgrind':
             r.try_to_reduce_runtime()
 
