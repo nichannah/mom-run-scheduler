@@ -140,11 +140,11 @@ class Run:
                 if 'months' in nml_sect:
                     nml_sect['months'] = 0
 
-                # Runs which were multiple days now run for 6 hours.
+                # Runs which were multiple days now run for 3 hours.
                 if 'days' in nml_sect:
                     if nml_sect['days'] >= 1:
                         nml_sect['days'] = 0
-                        nml_sect['hours'] = 6
+                        nml_sect['hours'] = 3
                         changed = True
 
                 # Runs which were multiple hours now run for 1 hour.
