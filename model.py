@@ -72,7 +72,7 @@ class Model:
         finally:
             os.chdir(saved_path)
 
-        with open(os.path.join(shared_dir, 'build.out'), 'w') as f:
+        with open(os.path.join(shared_dir, 'build.out'), 'wb') as f:
             f.write(output)
 
         return ret
@@ -110,7 +110,7 @@ class Model:
         finally:
             os.chdir(saved_path)
 
-        with open(os.path.join(model_dir, 'build.out'), 'w') as f:
+        with open(os.path.join(model_dir, 'build.out'), 'wb') as f:
             f.write(output)
 
         return ret
