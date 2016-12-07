@@ -199,7 +199,7 @@ class Run:
 
     def get_exe_cmd(self, node_ids):
 
-        hosts = ','.join(node_ids)
+        hosts = b','.join(node_ids)
         cmd = self.exe_cmd.format(hosts, self.ncpus, self.exe,
                                   self.output_file,
                                   'Run complete, exit code: ',
@@ -312,13 +312,13 @@ class Pbs:
 
     def parse_nodefile(self, string):
 
-        matches = re.findall('r\d+', string, flags=re.MULTILINE)
+        matches = re.findall(b'r\d+', string, flags=re.MULTILINE)
         return list(set(matches))
 
 
     def parse_jobid(self, string):
 
-        m = re.search('\d+\.r-man2', string)
+        m = re.search(b'\d+\.r-man2', string)
         if m:
             return m.group(0)
         else:
@@ -327,7 +327,7 @@ class Pbs:
 
     def parse_tmpdir(self, string):
 
-        m = re.search('^.+\d+\.r-man2', string, flags=re.MULTILINE)
+        m = re.search(b'^.+\d+\.r-man2', string, flags=re.MULTILINE)
 
         if m:
             return m.group(0)
