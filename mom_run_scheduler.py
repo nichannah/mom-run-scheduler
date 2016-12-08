@@ -303,7 +303,7 @@ class Pbs:
             self.p_obj.sendline('mkdir -p RESTART')
             self.p_obj.expect(self.prompt)
             print('executing: {}'.format(run.get_exe_cmd(nodes)))
-            #run.write_info_header()
+            run.write_info_header()
             self.p_obj.sendline(run.get_exe_cmd(nodes))
             self.p_obj.expect(self.prompt)
 
