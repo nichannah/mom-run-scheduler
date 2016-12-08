@@ -163,7 +163,7 @@ class Run:
         mom_input = os.path.join(self.my_dir, 'MOM_input')
         if os.path.exists(mom_input):
             for l in fileinput.input([mom_input], inplace=1):
-                line = re.sub('DAYMAX *= *.+', 'DAYMAX = 1.0', l)
+                line = re.sub(r'DAYMAX *= *.+', 'DAYMAX = 1.0', l)
                 print(line, end='')
             fileinput.close()
 
@@ -199,7 +199,7 @@ class Run:
 
     def get_exe_cmd(self, node_ids):
 
-        hosts = b','.join(node_ids)
+        hosts = ','.join(node_ids)
         cmd = self.exe_cmd.format(hosts, self.ncpus, self.exe,
                                   self.output_file,
                                   'Run complete, exit code: ',
@@ -247,7 +247,7 @@ class Pbs:
         self.p_obj.expect(self.prompt)
         self.p_obj.sendline('cat $PBS_NODEFILE')
         self.p_obj.expect(self.prompt)
-        nodes = self.parse_nodefile(self.p_obj.before)
+        nodes = self.parse_nodefile(self.p_obj.before.decode('utf-8'))
 
         return nodes
 
@@ -263,7 +263,7 @@ class Pbs:
         try:
             self.p_obj.sendline('echo $TMPDIR')
             self.p_obj.expect(self.prompt)
-            tmpdir = self.parse_tmpdir(self.p_obj.before)
+            tmpdir = self.parse_tmpdir(self.p_obj.before.decode('utf-8'))
         except pexpect.EOF:
             tmpdir = None
 
@@ -278,7 +278,7 @@ class Pbs:
         try:
             self.p_obj.sendline('echo $PBS_JOBID')
             self.p_obj.expect(self.prompt)
-            pbs_jobid = self.parse_jobid(self.p_obj.before)
+            pbs_jobid = self.parse_jobid(self.p_obj.before.decode('utf-8'))
         except pexpect.EOF:
             pbs_jobid = None
 
@@ -293,13 +293,17 @@ class Pbs:
         Start a run on a particular node
         """
 
+        #if not os.path.exists(run.exe)
+        #  print('executing: {}'.format(run.get_exe_cmd(nodes)))
+        #  return False
+
         try:
             self.p_obj.sendline('cd {}'.format(run.my_dir))
             self.p_obj.expect(self.prompt)
             self.p_obj.sendline('mkdir -p RESTART')
             self.p_obj.expect(self.prompt)
             print('executing: {}'.format(run.get_exe_cmd(nodes)))
-            run.write_info_header()
+            #run.write_info_header()
             self.p_obj.sendline(run.get_exe_cmd(nodes))
             self.p_obj.expect(self.prompt)
 
@@ -312,13 +316,13 @@ class Pbs:
 
     def parse_nodefile(self, string):
 
-        matches = re.findall(b'r\d+', string, flags=re.MULTILINE)
+        matches = re.findall(r'r\d+', string, flags=re.MULTILINE)
         return list(set(matches))
 
 
     def parse_jobid(self, string):
 
-        m = re.search(b'\d+\.r-man2', string)
+        m = re.search(r'\d+\.r-man2', string)
         if m:
             return m.group(0)
         else:
@@ -327,7 +331,7 @@ class Pbs:
 
     def parse_tmpdir(self, string):
 
-        m = re.search(b'^.+\d+\.r-man2', string, flags=re.MULTILINE)
+        m = re.search(r'^.+\d+\.r-man2', string, flags=re.MULTILINE)
 
         if m:
             return m.group(0)
@@ -541,6 +545,8 @@ def main():
                         help='Checkout the latest MOM6,SIS2,icebergs')
     parser.add_argument('--fast', action='store_true', default=False,
                         help='Run a fast subset of tests.')
+    parser.add_argument('--skip_build', action='store_true', default=False,
+                        help="Assume the models are already built.")
     args = parser.parse_args()
 
     args.mom_dir = os.path.realpath(args.mom_dir)
@@ -573,7 +579,8 @@ def main():
     configs = (compilers, builds, memory_types, analyzers)
 
     init_run_dirs(args.mom_dir, model_names, configs)
-    build_models(models, compilers, builds, memory_types)
+    if not args.skip_build:
+      build_models(models, compilers, builds, memory_types)
 
     exps = discover_experiments(args.mom_dir, models)
 

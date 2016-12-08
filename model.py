@@ -68,11 +68,15 @@ class Model:
             output = sp.check_output(command, stderr=sp.STDOUT, shell=True)
         except sp.CalledProcessError as e:
             ret = e.returncode
-            print(e.output, file=sys.stderr)
+            output = e.output
         finally:
             os.chdir(saved_path)
 
-        with open(os.path.join(shared_dir, 'build.out'), 'wb') as f:
+        output = output.decode('utf-8')
+        if ret:
+            print(output, file=sys.stderr)
+
+        with open(os.path.join(shared_dir, 'build.out'), 'w') as f:
             f.write(output)
 
         return ret
@@ -107,11 +111,14 @@ class Model:
         except sp.CalledProcessError as e:
             ret = e.returncode
             output = e.output
-            print(e.output, file=sys.stderr)
         finally:
             os.chdir(saved_path)
 
-        with open(os.path.join(model_dir, 'build.out'), 'wb') as f:
+        output = output.decode('utf-8')
+        if ret:
+            print(output, file=sys.stderr)
+
+        with open(os.path.join(model_dir, 'build.out'), 'w') as f:
             f.write(output)
 
         return ret
