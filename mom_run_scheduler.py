@@ -457,10 +457,6 @@ def create_runs(mom_dir, tmp_dir, exps, configs):
 
     runs = []
     for args in product([mom_dir], [tmp_dir], exps, *configs):
-        if 'valgrind' in args and 'DEBUG' not in args:
-            continue
-        if 'valgrind' in args and 'intel' not in args:
-            continue
         runs.append(Run(*args))
 
     return runs
@@ -545,9 +541,16 @@ def main():
                         help='Checkout the latest MOM6,SIS2,icebergs')
     parser.add_argument('--fast', action='store_true', default=False,
                         help='Run a fast subset of tests.')
+    parser.add_argument('--valgrind', action='store_true', default=False,
+                        help="""
+                        Run only valgrind tests. These are not included by
+                        default because they take so long.
+                        """)
     parser.add_argument('--skip_build', action='store_true', default=False,
                         help="Assume the models are already built.")
     args = parser.parse_args()
+
+    assert not (args.fast and args.valgrind)
 
     args.mom_dir = os.path.realpath(args.mom_dir)
 
@@ -563,16 +566,22 @@ def main():
     if not os.path.exists(os.path.join(args.mom_dir, '.datasets')):
         get_input_data(os.path.join(args.mom_dir, '.datasets'))
 
+    compilers = ['intel', 'gnu']
+    builds = ['DEBUG', 'REPRO']
+    memory_types = ['dynamic', 'dynamic_symmetric']
+    analyzers = ['none']
+
     if args.fast:
       compilers = ['intel']
       builds = ['REPRO']
       memory_types = ['dynamic_symmetric']
       analyzers = ['none']
-    else:
-      compilers = ['intel', 'gnu']
-      builds = ['DEBUG', 'REPRO']
+
+    if args.valgrind:
+      compilers = ['intel']
+      builds = ['DEBUG']
       memory_types = ['dynamic', 'dynamic_symmetric']
-      analyzers = ['none', 'valgrind']
+      analyzers = ['valgrind']
 
     model_names = ['ocean_only', 'ice_ocean_SIS2']
     models = [Model(m, args.mom_dir) for m in model_names]
