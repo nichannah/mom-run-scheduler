@@ -26,7 +26,7 @@ a single large PBS session and schedule all runs within that session. The runs
 will be executed in parallel as much as possible.
 """
 
-_valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind/libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=200000000 --max-stackframe=200000000 --error-limit=no --track-origins=yes --freelist-vol=10000000 --gen-suppressions=all --suppressions=/short/v45/nah599/more_home/valgrind_suppressions.txt'
+_valgrind_cmd = '-x TMPDIR={} -x LD_PRELOAD=/home/599/nah599/more_home/usr/local/lib/valgrind/libmpiwrap-amd64-linux.so /home/599/nah599/more_home/usr/local/bin//valgrind --main-stacksize=200000000 --max-stackframe=200000000 --error-limit=no --freelist-vol=10000000 --suppressions=/short/v45/nah599/more_home/valgrind_suppressions.txt'
 
 class Experiment:
 
