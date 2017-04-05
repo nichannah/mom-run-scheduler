@@ -243,7 +243,7 @@ class Pbs:
             self.p_obj = pexpect.spawn('bash')
             self.p_obj.expect(self.prompt)
 
-        self.p_obj.sendline('module load openmpi/1.8.4')
+        self.p_obj.sendline('module load openmpi/1.10.2')
         self.p_obj.expect(self.prompt)
         self.p_obj.sendline('cat $PBS_NODEFILE')
         self.p_obj.expect(self.prompt)
