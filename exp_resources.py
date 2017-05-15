@@ -1,6 +1,5 @@
 
 # The minimum number of cpus needed to run a particular model
-
 min_cpus = {
     'global_ALE/z' : 256,
     'global_ALE/layer' : 256,
@@ -36,6 +35,9 @@ min_cpus = {
     'SIS2_bergs_cgrid' : 128,
     'SIS2_cgrid' : 128,
 }
+
+# List of experiments to exclude.
+exclude = ['unit_tests']
 
 cpu_layout = {
     'OM4_025' : \

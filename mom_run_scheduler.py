@@ -36,7 +36,7 @@ class Experiment:
         self.name = path.split(model.name)[-1].strip('/')
         self.min_cpus = exp_resources.min_cpus.get(self.name, None)
         self.cpu_layout = exp_resources.cpu_layout.get(self.name, None)
-
+        self.exclude = self.name in exp_resources.exclude
 
 class NodeAllocator:
 
@@ -526,7 +526,8 @@ def discover_experiments(mom_dir, models):
 
                 if model:
                     e = Experiment(fix_exp_path(path, mom_dir), model)
-                    exps.append(e)
+                    if not e.exclude:
+                        exps.append(e)
     return exps
 
 
