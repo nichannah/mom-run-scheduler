@@ -38,6 +38,7 @@ min_cpus = {
 
 # List of experiments to exclude.
 exclude = ['unit_tests']
+valgrind_exclude = ['OM4_025']
 
 cpu_layout = {
     'OM4_025' : \

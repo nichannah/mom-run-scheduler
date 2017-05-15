@@ -36,7 +36,6 @@ class Experiment:
         self.name = path.split(model.name)[-1].strip('/')
         self.min_cpus = exp_resources.min_cpus.get(self.name, None)
         self.cpu_layout = exp_resources.cpu_layout.get(self.name, None)
-        self.exclude = self.name in exp_resources.exclude
 
 class NodeAllocator:
 
@@ -96,6 +95,7 @@ class Run:
         if exp.min_cpus:
             self.ncpus = exp.min_cpus
         self.nnodes = int(math.ceil(self.ncpus / 16.))
+        self.exlcude = False
 
         self.info_header = ''
 
@@ -103,6 +103,9 @@ class Run:
         self.analyzer_cmd = ''
         if analyzer == 'valgrind':
             self.analyzer_cmd = _valgrind_cmd.format(tmp_dir)
+            self.exclude = self.exclude or (self.exp.name in exp_resources.valgrind_exclude)
+
+        self.exclude = self.exclude or (self.exp.name in exp_resources.exclude)
 
         self.output = ''
         self.status = 'NOT_RUN'
@@ -457,7 +460,9 @@ def create_runs(mom_dir, tmp_dir, exps, configs):
 
     runs = []
     for args in product([mom_dir], [tmp_dir], exps, *configs):
-        runs.append(Run(*args))
+        r = Run(*args)
+        if not r.exclude:
+            runs.append(r)
 
     return runs
 
@@ -526,8 +531,7 @@ def discover_experiments(mom_dir, models):
 
                 if model:
                     e = Experiment(fix_exp_path(path, mom_dir), model)
-                    if not e.exclude:
-                        exps.append(e)
+                    exps.append(e)
     return exps
 
 
