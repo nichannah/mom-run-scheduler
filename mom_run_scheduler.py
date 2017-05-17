@@ -95,7 +95,7 @@ class Run:
         if exp.min_cpus:
             self.ncpus = exp.min_cpus
         self.nnodes = int(math.ceil(self.ncpus / 16.))
-        self.exlcude = False
+        self.exclude = False
 
         self.info_header = ''
 
