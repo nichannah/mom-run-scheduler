@@ -23,6 +23,7 @@ min_cpus = {
     'seamount/z' : 1,
     'seamount/layer' : 1,
     'seamount/rho' : 1,
+    'seamount/sigma' : 1,
     'SCM_idealized_hurricane' : 1,
     'CVmix_SCM_tests/mech_only/BML' : 1,
     'CVmix_SCM_tests/mech_only/KPP' : 1,
@@ -38,6 +39,7 @@ min_cpus = {
     'CVmix_SCM_tests/skin_warming_wind/EPBL' : 1,
     'SIS2_icebergs' : 128,
     'SIS2' : 128,
+    'Baltic' : 2,
     'SIS2_bergs_cgrid' : 128,
     'SIS2_cgrid' : 128,
 }
