@@ -40,7 +40,7 @@ def checkout_latest_code(mom_dir):
 
     for d in dirs:
         os.chdir(d)
-        sh.git('checkout', 'dev/master')
+        sh.git('checkout', 'dev/gfdl')
     os.chdir(orig_dir)
 
 
