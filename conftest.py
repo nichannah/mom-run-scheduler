@@ -10,6 +10,7 @@ def pytest_addoption(parser):
     parser.addoption('--mom_dir', default='./MOM6-examples',
                      help="Path to the MOM top-level dir.")
     parser.addoption('--exp', default='ocean_only-double_gyre')
+    parser.addoption('--model', default='ocean_only')
     parser.addoption('--compiler', default='intel')
     parser.addoption('--build', default='DEBUG')
     parser.addoption('--memory_type', default='dynamic')
@@ -63,7 +64,8 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize('analyzer', [analyzer])
 
     if 'build_dir' in metafunc.funcargnames:
-        args = product([mom_dir], compilers, model_names, builds, memory_types)
+        models = [metafunc.config.option.model]
+        args = product([mom_dir], compilers, models, builds, memory_types)
 
         build_dirs = []
         for a in args:
