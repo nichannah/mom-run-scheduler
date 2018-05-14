@@ -2,6 +2,7 @@ MOM6-examples
 MOM6-examples.clean
 MOM6-examples.dirty
 .*.swp
+MOM6_test_runtimes.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
